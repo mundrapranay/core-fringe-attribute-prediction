@@ -1,0 +1,90 @@
+
+===================================
+Processing file: Yale4
+
+===================================
+Running experiment for dormIDs: [np.uint64(31), np.uint64(32)]
+Multi-dorm core using dormIDs [np.uint64(31), np.uint64(32)]
+Core size: 976
+Number of core-core edges: 16817
+Number of core-fringe edges: 54609
+Number of core nodes with known gender: 976
+Number of fringe nodes to predict: 5035
+=== Multi-Dorm Core Experiment using dormIDs: [np.uint64(31), np.uint64(32)] ===
+Multi-dorm core size: 976
+Percentage of labelled core nodes: 10%
+  Class 1 AUC: 59.31%
+  Class 2 AUC: 59.31%
+Percentage of labelled core nodes: 20%
+  Class 1 AUC: 61.92%
+  Class 2 AUC: 61.92%
+Percentage of labelled core nodes: 30%
+  Class 1 AUC: 61.23%
+  Class 2 AUC: 61.23%
+Percentage of labelled core nodes: 40%
+  Class 1 AUC: 65.31%
+  Class 2 AUC: 65.31%
+Percentage of labelled core nodes: 50%
+  Class 1 AUC: 64.27%
+  Class 2 AUC: 64.27%
+Percentage of labelled core nodes: 60%
+  Class 1 AUC: 64.31%
+  Class 2 AUC: 64.31%
+Percentage of labelled core nodes: 70%
+  Class 1 AUC: 66.70%
+  Class 2 AUC: 66.70%
+Percentage of labelled core nodes: 80%
+  Class 1 AUC: 66.53%
+  Class 2 AUC: 66.53%
+Percentage of labelled core nodes: 90%
+  Class 1 AUC: 66.93%
+  Class 2 AUC: 66.93%
+Percentage of labelled core nodes: 100%
+  Class 1 AUC: 66.82%
+  Class 2 AUC: 66.82%
+Normal graph experiment (complete graph):
+  Training (random core) size: 976
+  Fringe (complement) size: 5445
+Percentage of labelled core nodes: 10%
+  Class 1 AUC: 59.44%
+  Class 2 AUC: 59.44%
+Percentage of labelled core nodes: 20%
+  Class 1 AUC: 66.01%
+  Class 2 AUC: 66.01%
+Percentage of labelled core nodes: 30%
+  Class 1 AUC: 65.79%
+  Class 2 AUC: 65.79%
+Percentage of labelled core nodes: 40%
+  Class 1 AUC: 68.66%
+  Class 2 AUC: 68.66%
+Percentage of labelled core nodes: 50%
+  Class 1 AUC: 71.70%
+  Class 2 AUC: 71.70%
+Percentage of labelled core nodes: 60%
+  Class 1 AUC: 73.65%
+  Class 2 AUC: 73.65%
+Percentage of labelled core nodes: 70%
+  Class 1 AUC: 75.36%
+  Class 2 AUC: 75.36%
+Percentage of labelled core nodes: 80%
+  Class 1 AUC: 76.57%
+  Class 2 AUC: 76.57%
+Percentage of labelled core nodes: 90%
+  Class 1 AUC: 77.56%
+  Class 2 AUC: 77.56%
+Percentage of labelled core nodes: 100%
+  Class 1 AUC: 78.33%
+  Class 2 AUC: 78.33%
+Multi-dorm core size: 976, Multi-dorm fringe size: 5035
+Normal graph fringe size: 5445
+Multi-dorm core results:
+{0.1: (np.float64(0.5930507070260715), np.float64(0.5930507070260715)), 0.2: (np.float64(0.6191646676346191), np.float64(0.619164667634619)), 0.3: (np.float64(0.6122743987122026), np.float64(0.6122743987122026)), 0.4: (np.float64(0.6531429518338489), np.float64(0.653142951833849)), 0.5: (np.float64(0.6426549775897987), np.float64(0.6426549775897985)), 0.6: (np.float64(0.6431407423773752), np.float64(0.6431407423773752)), 0.7: (np.float64(0.6670132883025062), np.float64(0.6670132883025062)), 0.8: (np.float64(0.6653251057382742), np.float64(0.6653251057382741)), 0.9: (np.float64(0.6693270626854365), np.float64(0.6693270626854366)), 1.0: (np.float64(0.6682013446120826), np.float64(0.6682013446120826))}
+Normal graph results:
+{0.1: (np.float64(0.5943720332927221), np.float64(0.5943720332927221)), 0.2: (np.float64(0.6601243091349814), np.float64(0.6601243091349815)), 0.3: (np.float64(0.6578817396205908), np.float64(0.6578817396205909)), 0.4: (np.float64(0.6866134635699211), np.float64(0.6866134635699211)), 0.5: (np.float64(0.7170192182835151), np.float64(0.7170192182835151)), 0.6: (np.float64(0.7364701410521421), np.float64(0.7364701410521423)), 0.7: (np.float64(0.7536442766964173), np.float64(0.7536442766964173)), 0.8: (np.float64(0.7657400330918708), np.float64(0.7657400330918709)), 0.9: (np.float64(0.7756237256133727), np.float64(0.7756237256133726)), 1.0: (np.float64(0.7833306517165632), np.float64(0.7833306517165632))}
+Multi-dorm core stats:
+Multi Dorm-based core (Dorms 31,32) | Core size: 976, Fringe size: 5035 | Core edges: 16817, Core-Fringe edges: 54609
+Gender ratio (C1:C2): Core: 1.02 | Fringe: 0.97
+Normal graph stats:
+Normal graph (random sample) | Core size: 976, Fringe size: 5445 | Core edges: 6742, Core-Fringe edges: 74820
+Gender ratio (C1:C2): Core: 0.96 | Fringe: 0.96
+Plot saved as ../figures/exp_results_Yale4_auc_dorms_31_32.png
