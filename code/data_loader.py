@@ -381,8 +381,7 @@ def link_lr_with_expected_fringe_degree_auc(
 
     # Build full feature matrices once
     X_core_full   = A_dense[core_indices, :]    # shape (num_core, n)
-    X_fringe_full = A_dense[fringe_indices, :]  # shape (num_fringe, n)
-
+    X_fringe_full = A_dense[fringe_indices, :]  # shape (num_fringe, n) (num_fringe, num_cores + num_fringe)
     for p in percentages:
         k = math.ceil(p * num_core)
         sampled_idx = np.random.choice(num_core, size=k, replace=False)
