@@ -58,7 +58,7 @@ def parse_fb100_mat_file(filename):
 
     return adj_matrix, metadata
 
-
+#@ToDO: unit test for the core-fringe edges
 def create_core_fringe_graph(adj_matrix, metadata, target_dorm_id):
     """
     Creates a core-fringe graph for a given dorm.
