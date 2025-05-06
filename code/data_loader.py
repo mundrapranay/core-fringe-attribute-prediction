@@ -376,6 +376,7 @@ def link_lr_with_expected_fringe_degree_auc(
     # expected_deg = estimate_expected_degree_from_core(adj_matrix, core_indices)
     expected_deg_fringe = estimate_expected_degree_from_core(adj_matrix, core_indices, fringe_indices)
     auc_dict = {}
+    betas = {}
     num_core = len(core_indices)
 
     # Build full feature matrices once
@@ -413,6 +414,7 @@ def link_lr_with_expected_fringe_degree_auc(
         # Train & evaluate
         clf = LogisticRegression(**lr_kwargs, random_state=seed)
         clf.fit(X_train, y_train)
+        betas[p] = clf.coef_.flatten()
         y_scores = clf.predict_proba(Xf)
         classes = clf.classes_
         
@@ -430,12 +432,12 @@ def link_lr_with_expected_fringe_degree_auc(
 
         auc_dict[p] = tuple(aucs)
 
-    return auc_dict
+    return auc_dict, betas
 
 
 
 
-def link_logistic_regression_core_only_auc(adj_matrix, core_indices, fringe_indices, y_core, y_fringe, percentages, seed=None):
+def link_logistic_regression_core_only_auc(adj_matrix, core_indices, fringe_indices, y_core, y_fringe, percentages, lr_kwargs=None, seed=42):
     """
     For each percentage in 'percentages', randomly sample that fraction of core nodes (using only core-core connectivity)
     to train a LINK logistic regression model. Then predict fringe node attributes using only their connectivity to the core,
@@ -461,12 +463,13 @@ def link_logistic_regression_core_only_auc(adj_matrix, core_indices, fringe_indi
         np.random.seed(seed)
         
     auc_dict = {}
+    betas = {}
     # For training, restrict features to core-core connectivity:
-    # X_core = adj_matrix[core_indices, :][:, core_indices]
+    X_core = adj_matrix[core_indices, :][:, core_indices]
     # # For fringe nodes, use only their connections to core nodes:
-    # X_fringe = adj_matrix[fringe_indices, :][:, core_indices]
-    X_core = adj_matrix[core_indices, :]   # rows are core nodes, columns are all nodes
-    X_fringe = adj_matrix[fringe_indices, :] # rows are fringe nodes, columns are all nodes
+    X_fringe = adj_matrix[fringe_indices, :][:, core_indices]
+    # X_core = adj_matrix[core_indices, :]   # rows are core nodes, columns are all nodes
+    # X_fringe = adj_matrix[fringe_indices, :] # rows are fringe nodes, columns are all nodes
     num_core = len(core_indices)
     
     for p in percentages:
@@ -485,9 +488,9 @@ def link_logistic_regression_core_only_auc(adj_matrix, core_indices, fringe_indi
         from sklearn.linear_model import LogisticRegression
         from sklearn.metrics import roc_auc_score
         
-        model = LogisticRegression(solver='liblinear', max_iter=1000)
+        model = LogisticRegression(**lr_kwargs, random_state=seed)
         model.fit(X_train, y_train)
-        
+        betas[p] = model.coef_.flatten()
         # Obtain probability estimates on the fringe nodes.
         # The shape of y_scores is (n_samples_fringe, n_classes).
         y_scores = model.predict_proba(X_fringe)
@@ -516,7 +519,7 @@ def link_logistic_regression_core_only_auc(adj_matrix, core_indices, fringe_indi
         # Store the AUC tuple for this percentage.
         auc_dict[p] = tuple(aucs)
         
-    return auc_dict
+    return auc_dict, betas
 
 def link_logistic_regression_core_only_acc(adj_matrix, core_indices, fringe_indices, y_core, y_fringe, percentages, seed=None):
     """
@@ -821,6 +824,307 @@ def plot_experiment_results_barline(experiment_results, title_prefix=None, save_
         plt.show()
         plt.cla()
         plt.close()
+
+
+
+# def plot_beta_vectors(betas, tag):
+#     """
+#     Given a dict mapping percentage -> 1D numpy array of coefficients,
+#     generates and saves two plots:
+#       1) Scatter plot of each beta vector (β) against feature index.
+#       2) Line plot of each beta vector against feature index.
+#     The output files will be named:
+#       {tag}_beta_scatter.png
+#       {tag}_beta_line.png
+
+#     Parameters:
+#     - betas: dict[float or str, np.ndarray], each array shape (n_features,)
+#     - tag: str, prefix to use in output filenames
+#     """
+#     # Validate and get feature count
+#     lengths = [beta.shape[0] for beta in betas.values()]
+#     if len(set(lengths)) != 1:
+#         raise ValueError("All beta vectors must have the same length.")
+#     n_features = lengths[0]
+
+#     # 1) Scatter plot
+#     plt.figure()
+#     for p, beta in betas.items():
+#         plt.scatter(range(n_features), beta, label=str(p))
+#     plt.xlabel("Feature index")
+#     plt.ylabel("Coefficient (β)")
+#     plt.title(f"Scatter of beta vectors ({tag})")
+#     plt.legend()
+#     fname_scatter = f"../figures/{tag}_beta_scatter.png"
+#     plt.savefig(fname_scatter)
+#     plt.close()
+
+#     # 2) Line plot
+#     plt.figure()
+#     for p, beta in betas.items():
+#         plt.plot(range(n_features), beta, label=str(p))
+#     plt.xlabel("Feature index")
+#     plt.ylabel("Coefficient (β)")
+#     plt.title(f"Beta vs. feature index ({tag})")
+#     plt.legend()
+#     fname_line = f"../figures/{tag}_beta_line.png"
+#     plt.savefig(fname_line)
+#     plt.close()
+
+#     print(f"Saved scatter plot to {fname_scatter}")
+#     print(f"Saved line plot    to {fname_line}")
+
+def plot_beta_vectors(betas, tag):
+    """
+    Given a dict mapping percentage -> 1D numpy array of coefficients,
+    generates and saves **two separate** plots for each key:
+      1) Scatter plot of β vs. feature index
+      2) Line plot of β vs. feature index
+    Filenames and titles include the percentage.
+
+    Parameters:
+    - betas: dict[float or str, np.ndarray], each array shape (n_features,)
+    - tag: str, prefix to use in output filenames
+    """
+    # Validate all β-vectors have the same length
+    lengths = [beta.shape[0] for beta in betas.values()]
+    if len(set(lengths)) != 1:
+        raise ValueError("All beta vectors must have the same length.")
+
+    for p, beta in betas.items():
+        # Make a filesystem-safe percentage string
+        perc_str = str(p).replace('.', 'p')
+        n_features = beta.shape[0]
+
+        # 1) Scatter plot (feature index vs. coefficient)
+        plt.figure()
+        plt.scatter(range(n_features), beta)
+        plt.xlabel("Feature index")
+        plt.ylabel("Coefficient (β)")
+        plt.title(f"Scatter of β for p={p} ({tag})")
+        fname_scatter = f"../figures/{tag}_{perc_str}_beta_scatter.png"
+        plt.savefig(fname_scatter)
+        plt.close()
+        print(f"Saved scatter plot to {fname_scatter}")
+
+        # 2) Line plot (feature index vs. coefficient)
+        plt.figure()
+        plt.plot(range(n_features), beta)
+        plt.xlabel("Feature index")
+        plt.ylabel("Coefficient (β)")
+        plt.title(f"Line plot of β for p={p} ({tag})")
+        fname_line = f"../figures/{tag}_{perc_str}_beta_line.png"
+        plt.savefig(fname_line)
+        plt.close()
+        print(f"Saved line plot to {fname_line}")
+
+
+
+# def plot_beta_comparison(betas_all, betas_core, tag):
+#     """
+#     Given two dicts mapping percentage -> 1D numpy array of coefficients,
+#     generates and saves a scatter plot of β_all vs. β_core for each percentage,
+#     padding the shorter vector with NaNs so both vectors align by index.
+
+#     Parameters:
+#     - betas_all: dict[float or str, np.ndarray], coefficients from model trained on all edges
+#     - betas_core: dict[float or str, np.ndarray], coefficients from model trained on core-core edges
+#     - tag: str, prefix to use in output filenames
+#     """
+#     # Ensure both dicts have the same keys
+#     if set(betas_all.keys()) != set(betas_core.keys()):
+#         raise ValueError("The two beta dicts must have the same percentage keys.")
+
+#     for p in betas_all:
+#         beta_x = betas_all[p]
+#         beta_y = betas_core[p]
+#         # Determine max length
+#         max_len = max(beta_x.shape[0], beta_y.shape[0])
+#         # Pad shorter with NaN
+#         bx = np.full(max_len, np.nan)
+#         by = np.full(max_len, np.nan)
+#         bx[:beta_x.shape[0]] = beta_x
+#         by[:beta_y.shape[0]] = beta_y
+
+#         # Make a filesystem-safe percentage string
+#         perc_str = str(p).replace('.', 'p')
+
+#         # Scatter plot of β_all (x) vs β_core (y)
+#         plt.figure()
+#         plt.scatter(bx, by)
+#         plt.xlabel("β_all (all edges)")
+#         plt.ylabel("β_core (core-core edges)")
+#         plt.title(f"β_all vs β_core for p={p} ({tag})")
+#         fname = f"../figures/{tag}_{perc_str}_beta_compare.png"
+#         plt.savefig(fname)
+#         plt.close()
+#         print(f"Saved comparison plot to {fname}")
+
+
+
+# def plot_beta_comparison(betas_all, betas_core, tag):
+#     """
+#     Given two dicts mapping percentage -> 1D numpy array of coefficients,
+#     generates and saves a scatter plot comparing two β vectors for each percentage,
+#     padding the shorter vector with NaNs so both vectors align by index,
+#     and colors β_all in red and β_core in blue when plotted against feature index.
+
+#     Parameters:
+#     - betas_all: dict[float or str, np.ndarray], coefficients from model trained on all edges
+#     - betas_core: dict[float or str, np.ndarray], coefficients from model trained on core-core edges
+#     - tag: str, prefix to use in output filenames
+#     """
+#     # Ensure both dicts have the same keys
+#     if set(betas_all.keys()) != set(betas_core.keys()):
+#         raise ValueError("The two beta dicts must have the same percentage keys.")
+
+#     for p in betas_all:
+#         beta_x = betas_all[p]
+#         beta_y = betas_core[p]
+#         # Determine max length
+#         max_len = max(beta_x.shape[0], beta_y.shape[0])
+#         # Pad shorter with NaN
+#         bx = np.full(max_len, np.nan)
+#         by = np.full(max_len, np.nan)
+#         bx[:beta_x.shape[0]] = beta_x
+#         by[:beta_y.shape[0]] = beta_y
+
+#         # Make a filesystem-safe percentage string
+#         perc_str = str(p).replace('.', 'p')
+
+#         # 1) Scatter plot: β_all vs feature index (red) and β_core vs feature index (blue)
+#         plt.figure()
+#         plt.scatter(range(max_len), bx, color='blue', label='β_all')  # β_all in blue
+#         plt.scatter(range(max_len), by, color='red', label='β_core')  # β_core in red
+#         plt.xlabel("Feature index")
+#         plt.ylabel("Coefficient (β)")
+#         plt.title(f"β_all (red) vs β_core (blue) for p={p} ({tag})")
+#         plt.legend()
+#         fname_idx = f"../figures/{tag}_{perc_str}_beta_compare_index.png"
+#         plt.savefig(fname_idx)
+#         plt.close()
+#         print(f"Saved index comparison plot to {fname_idx}")
+
+#         # 2) Scatter plot of β_all (x) vs β_core (y), colored by comparison
+#         plt.figure()
+#         # Mask out NaNs
+#         mask = ~np.isnan(bx) & ~np.isnan(by)
+#         x_vals = bx[mask]
+#         y_vals = by[mask]
+#         # Points where β_all >= β_core in blue, else red
+#         ge_mask = x_vals >= y_vals
+#         lt_mask = x_vals < y_vals
+#         plt.scatter(x_vals[ge_mask], y_vals[ge_mask], color='blue', label='β_all ≥ β_core')
+#         plt.scatter(x_vals[lt_mask], y_vals[lt_mask], color='red', label='β_all < β_core')
+#         plt.xlabel("β_all (all edges)")
+#         plt.ylabel("β_core (core-core edges)")
+#         plt.title(f"β_all vs β_core for p={p} ({tag})")
+#         plt.legend()
+#         fname_xy = f"../figures/{tag}_{perc_str}_beta_compare_xy.png"
+#         plt.savefig(fname_xy)
+#         plt.close()
+#         print(f"Saved XY comparison plot to {fname_xy}")
+
+
+
+def plot_beta_comparison(betas_all, betas_core, tag):
+    """
+    Given two dicts mapping percentage -> 1D numpy array of coefficients,
+    generates and saves a scatter plot comparing two β vectors for each percentage,
+    padding the shorter vector with NaNs so both vectors align by index,
+    and colors β_all in red and β_core in blue when plotted against feature index.
+
+    Parameters:
+    - betas_all: dict[float or str, np.ndarray], coefficients from model trained on all edges
+    - betas_core: dict[float or str, np.ndarray], coefficients from model trained on core-core edges
+    - tag: str, prefix to use in output filenames
+    """
+    # Ensure both dicts have the same keys
+    if set(betas_all.keys()) != set(betas_core.keys()):
+        raise ValueError("The two beta dicts must have the same percentage keys.")
+
+    for p in betas_all:
+        beta_x = betas_all[p]
+        beta_y = betas_core[p]
+        # Determine max length
+        max_len = max(beta_x.shape[0], beta_y.shape[0])
+        # Pad shorter with NaN
+        bx = np.full(max_len, np.nan)
+        by = np.full(max_len, np.nan)
+        bx[:beta_x.shape[0]] = beta_x
+        by[:beta_y.shape[0]] = beta_y
+
+        # Make a filesystem-safe percentage string
+        perc_str = str(p).replace('.', 'p')
+
+        # 1) Scatter plot: β_all vs feature index (red) and β_core vs feature index (blue)
+        # plt.figure()
+        # plt.scatter(range(max_len), bx, color='blue', label='β_all')  # β_all in blue
+        # plt.scatter(range(max_len), by, color='red', label='β_core', alpha=0.5)  # β_core in red
+        # plt.xlabel("Feature index")
+        # plt.ylabel("Coefficient (β)")
+        # plt.title(f"β_all (red) vs β_core (blue) for p={p} ({tag})")
+        # plt.legend()
+        # fname_idx = f"../figures/{tag}_{perc_str}_beta_compare_index.png"
+        # plt.savefig(fname_idx)
+        # plt.close()
+        # print(f"Saved index comparison plot to {fname_idx}")
+
+        # 2) Scatter plot of β_all (x) vs β_core (y)
+        # plt.figure()
+        # # Mask out NaNs
+        # mask = ~np.isnan(bx) & ~np.isnan(by)
+        # x_vals = bx[mask]
+        # y_vals = by[mask]
+        # # Plot points colored: blue for β_all, red for β_core
+        # plt.scatter(x_vals, y_vals, color='blue', label='β_all')
+        # plt.scatter(x_vals, y_vals, color='red', label='β_core', alpha=0.5)
+        # plt.xlabel("β_all (all edges)")
+        # plt.ylabel("β_core (core-core edges)")
+        # plt.title(f"β_all vs β_core for p={p} ({tag})")
+        # plt.legend()
+        # fname_xy = f"../figures/{tag}_{perc_str}_beta_compare_xy.png"
+        # plt.savefig(fname_xy)
+        # plt.close()
+        # print(f"Saved XY comparison plot to {fname_xy}")
+
+        mask = ~np.isnan(bx) & ~np.isnan(by)
+        x_vals = bx[mask]
+        y_vals = by[mask]
+
+        # --- 2) Improved XY comparison plot ---
+        fig, ax = plt.subplots(figsize=(6,6), dpi=150)
+
+        # (a) optional hexbin underlay for density
+        hb = ax.hexbin(x_vals, y_vals,
+                       gridsize=50,
+                       cmap='Blues',
+                       mincnt=1,
+                       alpha=0.4)
+
+        # (b) overlay the raw points with small, semi-transparent markers
+        ax.scatter(x_vals, y_vals,
+                   s=15,          # smaller dots
+                   c='purple',    # override so points show over hexbin
+                   alpha=0.6,
+                   label='features')
+
+        # (c) identity line y = x
+        mn = np.nanmin([x_vals.min(), y_vals.min()]) * 1.1
+        mx = np.nanmax([x_vals.max(), y_vals.max()]) * 1.1
+        ax.plot([mn, mx], [mn, mx], 'k--', linewidth=1, label='y = x')
+
+        ax.set_xlabel("β_all (all edges)")
+        ax.set_ylabel("β_core (core-core edges)")
+        ax.set_title(f"β_all vs β_core for p={p} ({tag})")
+        ax.legend(loc='upper left', fontsize='small')
+        ax.grid(True, linestyle=':', alpha=0.5)
+
+        fname_xy = f"../figures/{tag}_{perc_str}_beta_compare_all.png"
+        fig.savefig(fname_xy, bbox_inches='tight')
+        plt.close(fig)
+        print(f"Saved XY comparison plot to {fname_xy}")
+
 
 # === Main Data Loader / Experiment Runner ===
 

@@ -418,7 +418,7 @@ def perform_experiment_for_multi_dorm_core_node2vec(adj_matrix, metadata, dorm_i
     print(f"=== Multi-Dorm Core Experiment using dormIDs: {dorm_ids} ===")
     print(f"Multi-dorm core size: {len(multi_dorm_core_indices)}")
     
-    lr_kwargs = {'C': 0.1, 'solver': 'liblinear', 'max_iter': 500}
+    lr_kwargs = {'C': 0.1, 'solver': 'liblinear', 'max_iter': 1000}
     embed_kwargs={'dimensions': 32, 'walk_length': 40, 'num_walks': 5, 'window_size': 5, 'p': 0.5, 'q': 1.0, 'alpha': 0.025}
     # results_multi = predict_attribute_with_node2vec_auc_classwise(
     #     adj_matrix=multi_dorm_graph,
@@ -430,7 +430,7 @@ def perform_experiment_for_multi_dorm_core_node2vec(adj_matrix, metadata, dorm_i
     #     lr_kwargs=lr_kwargs,
     #     seed=42
     # )
-    results_multi = link_lr_with_expected_fringe_degree_auc(
+    results_multi, betas_multi = link_lr_with_expected_fringe_degree_auc(
         adj_matrix=multi_dorm_graph,
         core_indices=multi_dorm_core_indices, 
         fringe_indices=multi_dorm_fringe_indices, 
@@ -440,6 +440,20 @@ def perform_experiment_for_multi_dorm_core_node2vec(adj_matrix, metadata, dorm_i
         lr_kwargs=lr_kwargs,
         seed=42
     )
+
+    results_multi_core, betas_multi_core = link_logistic_regression_core_only_auc(
+        adj_matrix=multi_dorm_graph,
+        core_indices=multi_dorm_core_indices, 
+        fringe_indices=multi_dorm_fringe_indices, 
+        y_core=multi_gender_core, 
+        y_fringe=multi_gender_fringe,
+        percentages=percentages,
+        lr_kwargs=lr_kwargs,
+        seed=42
+    )
+
+    # plot_beta_vectors(betas_multi, "Yale_MultiDorm")
+    plot_beta_comparison(betas_multi, betas_multi_core, "Yale_MultiDorm")
     
     # Compute multi-dorm core statistics.
     core_size = len(multi_dorm_core_indices)
@@ -510,7 +524,7 @@ def perform_experiment_for_multi_dorm_core_node2vec(adj_matrix, metadata, dorm_i
     #     seed=42
     # )
 
-    results_normal = link_lr_with_expected_fringe_degree_auc(
+    results_normal, betas_normal = link_lr_with_expected_fringe_degree_auc(
         adj_matrix=adj_matrix,
         core_indices=random_core_indices,
         fringe_indices=random_fringe_indices,
@@ -520,7 +534,21 @@ def perform_experiment_for_multi_dorm_core_node2vec(adj_matrix, metadata, dorm_i
         lr_kwargs=lr_kwargs,
         seed=42
     )
-    
+
+    results_normal_core, betas_normal_core = link_logistic_regression_core_only_auc(
+        adj_matrix=adj_matrix,
+        core_indices=random_core_indices,
+        fringe_indices=random_fringe_indices,
+        y_core=random_gender_core,
+        y_fringe=random_gender_fringe,
+        percentages=percentages,
+        lr_kwargs=lr_kwargs,
+        seed=42
+    )
+
+    # plot_beta_vectors(betas_normal, "Yale_IID_Sample")
+    plot_beta_comparison(betas_normal, betas_normal_core, "Yale_IID_Sample")
+
     sizes = (core_size, fringe_size, normal_fringe_size)
     return {'multi_dorm': results_multi, 'normal': results_normal, 'sizes': sizes, 'stats': stats_string, 'normal_stats': normal_stats_string}
 
@@ -570,8 +598,8 @@ if __name__ == '__main__':
             chosen_dorms_list = [[np.uint(31), np.uint(32)]]
             percentages = [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.0]
             # Run experiments with a fixed seed for reproducibility.
-            experiment_results = run_experiments_node2vec(adj_matrix, metadata, chosen_dorms_list, percentages, seed=42)
-            plot_experiment_results_barline(experiment_results, title_prefix="Performance Comparison (node2vec)", save_filename_prefix=f"../figures/exp_results_{tag}_auc_node2vec_regularizer_dynamic")
+            experiment_results = run_experiments_node2vec(adj_matrix, metadata, chosen_dorms_list, percentages, seed=123)
+            # plot_experiment_results_barline(experiment_results, title_prefix="Performance Comparison (node2vec)", save_filename_prefix=f"../figures/exp_results_{tag}_auc_node2vec_regularizer_dynamic")
             # dorm_ids = [[np.uint(31), np.uint(32)]]
             # multi_dorm_graph, multi_dorm_core_indices, multi_dorm_fringe_indices = create_multi_dorm_core_fringe_graph(adj_matrix, metadata, dorm_ids)
             # multi_gender_core, multi_gender_fringe = prepare_core_fringe_attributes(metadata, multi_dorm_core_indices, multi_dorm_fringe_indices)
