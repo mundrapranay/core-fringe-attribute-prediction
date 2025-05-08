@@ -4,7 +4,7 @@ from os import listdir
 from os.path import join as path_join
 import itertools
 import numpy as np
-from define_paths import * 
+# from define_paths import * 
 from data_loader import *
 import random
 # 1) Patch scipy.linalg
@@ -16,6 +16,8 @@ import networkx as nx
 from gensim.models import Word2Vec
 from sklearn.metrics import roc_auc_score
 import math
+
+fb_code_path = '/Users/pranaymundra/Desktop/research_code/core-fringe-attribute-prediction/data/fb100/' ## directory path of raw FB100 .mat files 
 
 
 def alias_setup(probs):
@@ -535,6 +537,18 @@ def perform_experiment_for_multi_dorm_core_node2vec(adj_matrix, metadata, dorm_i
         seed=42
     )
 
+
+    results_normal_2, betas_normal_2 = link_lr_with_expected_fringe_degree_auc(
+        adj_matrix=adj_matrix,
+        core_indices=random_core_indices,
+        fringe_indices=random_fringe_indices,
+        y_core=random_gender_core,
+        y_fringe=random_gender_fringe,
+        percentages=percentages,
+        lr_kwargs=lr_kwargs,
+        seed=123
+    )
+
     results_normal_core, betas_normal_core = link_logistic_regression_core_only_auc(
         adj_matrix=adj_matrix,
         core_indices=random_core_indices,
@@ -547,7 +561,8 @@ def perform_experiment_for_multi_dorm_core_node2vec(adj_matrix, metadata, dorm_i
     )
 
     # plot_beta_vectors(betas_normal, "Yale_IID_Sample")
-    plot_beta_comparison(betas_normal, betas_normal_core, "Yale_IID_Sample")
+    # plot_beta_comparison(betas_normal, betas_normal_core, "Yale_IID_Sample")
+    plot_beta_comparison(betas_normal_2, betas_normal, "Yale_IID_Sample_Train_Twice")
 
     sizes = (core_size, fringe_size, normal_fringe_size)
     return {'multi_dorm': results_multi, 'normal': results_normal, 'sizes': sizes, 'stats': stats_string, 'normal_stats': normal_stats_string}

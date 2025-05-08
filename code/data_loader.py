@@ -1,5 +1,5 @@
 from __future__ import division
-from define_paths import * 
+# from define_paths import * 
 import os
 from os import listdir
 from os.path import join as path_join
@@ -13,6 +13,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report
 import random
 import math
+
+fb_code_path = '/Users/pranaymundra/Desktop/research_code/core-fringe-attribute-prediction/data/fb100/' ## directory path of raw FB100 .mat files 
+
 
 def parse_fb100_mat_file(filename):
     """ 
