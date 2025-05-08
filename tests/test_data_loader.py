@@ -4,6 +4,7 @@ import networkx as nx
 from scipy.sparse import csr_matrix
 import sys
 import os
+from scipy.io import savemat
 
 # Add the project root directory to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,7 +12,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from code.data_loader import (
     create_core_fringe_graph,
     create_multi_dorm_core_fringe_graph,
-    link_logistic_regression_core_only_auc
+    link_logistic_regression_core_only_auc,
+    parse_fb100_mat_file,
+    link_lr_with_expected_fringe_degree_auc
 )
 
 def create_test_clique_and_tree():
@@ -153,3 +156,178 @@ def test_link_logistic_regression_core_only_auc():
     aucs = auc_dict[1.0]
     assert aucs is not None  # check that we got results
     assert all(auc == 1.0 for auc in aucs if auc is not None)  # perfect separation should give AUC=1.0 
+
+def create_test_mat_file(tmp_path):
+    """Creates a temporary .mat file for testing parse_fb100_mat_file."""
+    # Create a small test graph
+    n = 10
+    A = np.zeros((n, n))
+    # Add some edges
+    A[0:5, 0:5] = 1  # first 5 nodes form a clique
+    A[5:, 5:] = 1    # last 5 nodes form a clique
+    # Add connections between cliques through nodes that won't be removed
+    A[1, 6] = A[6, 1] = 1  # connect through nodes 1 and 6
+    A[2, 7] = A[7, 2] = 1  # connect through nodes 2 and 7
+    np.fill_diagonal(A, 0)  # remove self-loops
+    
+    # Create metadata
+    local_info = np.zeros((n, 7))
+    # Set gender (col 1) and dorm (col 4)
+    local_info[0:5, 1] = 1  # first 5 nodes gender=1
+    local_info[5:, 1] = 2   # last 5 nodes gender=2
+    local_info[0:5, 4] = 1  # first 5 nodes dorm=1
+    local_info[5:, 4] = 2   # last 5 nodes dorm=2
+    
+    # Add some missing data to nodes that aren't critical for connectivity
+    local_info[0, 1] = 0  # missing gender
+    local_info[5, 4] = 0  # missing dorm
+    
+    # Save to temporary file
+    filepath = tmp_path / "test.mat"
+    savemat(str(filepath), {'A': A, 'local_info': local_info})
+    return filepath
+
+def test_parse_fb100_mat_file(tmp_path):
+    """Test parsing of FB100 .mat files and data cleaning."""
+    filepath = create_test_mat_file(tmp_path)
+    
+    # Parse the file
+    adj_matrix, metadata = parse_fb100_mat_file(str(filepath))
+    
+    # Assertions
+    assert adj_matrix.shape[0] == 8  # 2 nodes removed due to missing data
+    assert metadata.shape[0] == 8
+    assert np.all(metadata[:, 1] != 0)  # no missing gender
+    assert np.all(metadata[:, 4] != 0)  # no missing dorm
+    
+    # Check that the adjacency matrix is symmetric
+    assert np.all(adj_matrix.toarray() == adj_matrix.toarray().T)
+    
+    # Check that the graph is connected
+    G = nx.from_scipy_sparse_array(adj_matrix)
+    assert nx.is_connected(G)
+
+def test_create_core_fringe_graph_edge_cases():
+    """Test create_core_fringe_graph with edge cases."""
+    # Create a test graph
+    G = nx.Graph()
+    G.add_nodes_from(range(5))
+    G.add_edges_from([(0,1), (1,2), (2,3), (3,4)])
+    adj_matrix = nx.to_scipy_sparse_array(G, format='csr', dtype=np.int32)
+    adj_matrix.indices = adj_matrix.indices.astype(np.int32)
+    adj_matrix.indptr = adj_matrix.indptr.astype(np.int32)
+    
+    # Create metadata
+    metadata = np.zeros((5, 7))
+    metadata[0:2, 4] = 1  # first 2 nodes in dorm 1
+    metadata[2:, 4] = 2   # last 3 nodes in dorm 2
+    
+    # Test with non-existent dorm
+    core_fringe_adj, core_indices, fringe_indices = create_core_fringe_graph(
+        adj_matrix, metadata, target_dorm_id=3
+    )
+    assert len(core_indices) == 0
+    assert len(fringe_indices) == 0
+    
+    # Test with isolated core
+    metadata[0, 4] = 3  # node 0 in dorm 3
+    core_fringe_adj, core_indices, fringe_indices = create_core_fringe_graph(
+        adj_matrix, metadata, target_dorm_id=3
+    )
+    assert len(core_indices) == 1
+    assert len(fringe_indices) == 1  # node 1 is fringe
+
+def test_create_multi_dorm_core_fringe_graph_edge_cases():
+    """Test create_multi_dorm_core_fringe_graph with edge cases."""
+    # Create a test graph
+    G = nx.Graph()
+    G.add_nodes_from(range(6))
+    G.add_edges_from([(0,1), (1,2), (2,3), (3,4), (4,5)])
+    adj_matrix = nx.to_scipy_sparse_array(G, format='csr', dtype=np.int32)
+    adj_matrix.indices = adj_matrix.indices.astype(np.int32)
+    adj_matrix.indptr = adj_matrix.indptr.astype(np.int32)
+    
+    # Create metadata
+    metadata = np.zeros((6, 7))
+    metadata[0:2, 4] = 1  # first 2 nodes in dorm 1
+    metadata[2:4, 4] = 2  # next 2 nodes in dorm 2
+    metadata[4:, 4] = 3   # last 2 nodes in dorm 3
+    
+    # Test with empty dorm list
+    core_fringe_adj, core_indices, fringe_indices = create_multi_dorm_core_fringe_graph(
+        adj_matrix, metadata, target_dorm_ids=[]
+    )
+    assert len(core_indices) == 0
+    assert len(fringe_indices) == 0
+    
+    # Test with non-existent dorm
+    core_fringe_adj, core_indices, fringe_indices = create_multi_dorm_core_fringe_graph(
+        adj_matrix, metadata, target_dorm_ids=[4]
+    )
+    assert len(core_indices) == 0
+    assert len(fringe_indices) == 0
+
+def test_link_lr_with_expected_fringe_degree_auc():
+    """Test link_lr_with_expected_fringe_degree_auc with expected degree imputation."""
+    # Create a test graph with two cliques
+    G = nx.Graph()
+    # Create two 4-node cliques
+    clique1_nodes = [0, 1, 2, 3]  # core
+    clique2_nodes = [4, 5, 6, 7]  # fringe
+    
+    # Add edges within each clique
+    for i in clique1_nodes:
+        for j in clique1_nodes:
+            if i < j:
+                G.add_edge(i, j)
+    for i in clique2_nodes:
+        for j in clique2_nodes:
+            if i < j:
+                G.add_edge(i, j)
+    
+    # Add core-fringe edges
+    G.add_edge(0, 4)
+    G.add_edge(1, 5)
+    G.add_edge(2, 6)
+    G.add_edge(3, 7)
+    
+    # Convert to adjacency matrix with int32 dtype and indices
+    adj_matrix = nx.to_scipy_sparse_array(G, format='csr', dtype=np.int32)
+    adj_matrix.indices = adj_matrix.indices.astype(np.int32)
+    adj_matrix.indptr = adj_matrix.indptr.astype(np.int32)
+    
+    # Create metadata
+    metadata = np.zeros((8, 7))
+    metadata[clique1_nodes, 4] = 1  # dorm_id=1 for core
+    metadata[clique2_nodes, 4] = 2  # dorm_id=2 for fringe
+    
+    # Set gender labels
+    metadata[[0, 1], 1] = 1  # first two core nodes gender=1
+    metadata[[2, 3], 1] = 2  # last two core nodes gender=2
+    metadata[clique2_nodes, 1] = 2  # all fringe nodes gender=2
+    
+    # Test with 100% of core nodes labeled
+    core_indices = np.array(clique1_nodes, dtype=np.int32)
+    fringe_indices = np.array(clique2_nodes, dtype=np.int32)
+    y_core = metadata[core_indices, 1]
+    y_fringe = metadata[fringe_indices, 1]
+    
+    percentages = [1.0]
+    lr_kwargs = {'C': 0.1, 'solver': 'liblinear', 'max_iter': 1000}
+    
+    auc_dict, betas = link_lr_with_expected_fringe_degree_auc(
+        adj_matrix=adj_matrix,
+        core_indices=core_indices,
+        fringe_indices=fringe_indices,
+        y_core=y_core,
+        y_fringe=y_fringe,
+        percentages=percentages,
+        lr_kwargs=lr_kwargs,
+        seed=42
+    )
+    
+    # Assertions
+    assert 1.0 in auc_dict
+    aucs = auc_dict[1.0]
+    assert aucs is not None
+    assert all(auc == 1.0 for auc in aucs if auc is not None)  # perfect separation 
