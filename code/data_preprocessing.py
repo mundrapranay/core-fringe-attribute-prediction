@@ -446,6 +446,79 @@ def link_logistic_regression(adj_file, core_file, fringe_file, metadata_file, co
 
 
 
+
+def pipeline():
+    file_ext = '.mat'
+    for f in listdir(fb_code_path):
+        if f.endswith(file_ext):
+            print(f)
+            adj_matrix, metadata = parse_fb100_mat_file(path_join(fb_code_path, f))
+            chosen_dorms_list = [[np.uint(31), np.uint(32)]]
+            adj_matrix, core_indices, fringe_indices = create_multi_dorm_core_fringe_graph(adj_matrix, metadata, chosen_dorms_list)
+            percentages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+            for p in percentages:
+                labelled_core_indices = np.random.choice(core_indices, size=int(p * len(core_indices)), replace=False)
+                beta_core_only_p = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=True)
+                beta_core_fringe_p = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False)
+                print("Correlation:", np.corrcoef(beta_core_only_p, beta_core_fringe_p[labelled_core_indices])[0, 1])
+                plot_beta_comparison(beta_core_only_p, beta_core_fringe_p[labelled_core_indices], f"Yale_31_32_pipeline_{p}")
+
+            # beta_core_only = link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=True)
+            # beta_core_fringe = link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False)
+            # print("Correlation:", np.corrcoef(beta_core_only, beta_core_fringe[core_indices])[0, 1])
+            # plot_beta_comparison(beta_core_only, beta_core_fringe[core_indices], "Yale_31_32_pipeline")
+
+def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False):
+    # Get gender and dorm information
+    gender = metadata[:, 1]
+    dorm = metadata[:, 4]
+
+    # Create core-only adjacency matrix
+    if core_only:
+        X_train = adj_matrix[core_indices, :][:, core_indices]
+        y_train = gender[core_indices]
+        X_test = adj_matrix[fringe_indices, :][:, core_indices]
+        print("\n Feature Space (Core-Core only)")
+        print(f"X_train shape: {X_train.shape}")
+        print(f"y_train shape: {y_train.shape}")
+        # print(f"Number of non-zero elements in X_train: {X_train.nnz}")
+    else:
+        X_train = adj_matrix[core_indices, :]
+        y_train = gender[core_indices]
+        X_test = adj_matrix[fringe_indices, :]
+        print("\n Feature Space (Core-Fringe)")
+        print(f"X_train shape: {X_train.shape}")
+        print(f"y_train shape: {y_train.shape}")
+        # print(f"Number of non-zero elements in X_train: {X_train.nnz}")
+    
+    # X_test = adj_matrix[fringe_indices, :][:, core_indices]
+    y_test = gender[fringe_indices]
+    seed = 42
+    unique_train_classes = np.unique(y_train)
+    print(f"Unique training classes: {unique_train_classes}")
+    if unique_train_classes.size < 2:
+        print("Not enough unique classes for training. Skipping logistic regression.")
+        return
+    
+    # Train logistic regression model
+    lr_kwargs = {'C': 0.1, 'solver': 'liblinear', 'max_iter': 1000}
+    model = LogisticRegression(**lr_kwargs, random_state=seed)
+    model.fit(X_train, y_train)
+    beta = model.coef_.flatten()
+    print(f"Number of non-zero coefficients: {np.count_nonzero(beta)}")
+    print(f"Mean absolute coefficient: {np.mean(np.abs(beta)):.4f}")
+    print(f"Max coefficient: {np.max(np.abs(beta)):.4f}")
+    print(f"Min coefficient: {np.min(np.abs(beta)):.4f}")
+    print(f"Max coefficient (No-Abs): {np.max(beta):.4f}")
+    print(f"Min coefficient (No-Abs): {np.min(beta):.4f}")
+    
+    # Make predictions on test set
+    y_test_pred = model.predict(X_test)
+    y_test_scores = model.predict_proba(X_test)
+    print(f"Test Accuracy: {accuracy_score(y_test, y_test_pred):.4f}")
+    print(f"Test ROC AUC: {roc_auc_score(y_test, y_test_scores[:, 1]):.4f}")
+    return beta
+
 def plot_beta_comparison(beta_all, beta_core, tag):
     """
     Generates and saves a scatter plot comparing two β vectors,
@@ -504,10 +577,10 @@ def plot_beta_comparison(beta_all, beta_core, tag):
 if __name__ == "__main__":
     # make_core_fringe()
     # Update these values based on your actual saved files and stats
-    adj_file = "Yale_31_32_adj.npy"
-    core_file = "Yale_31_32_core.npy"
-    fringe_file = "Yale_31_32_fringe.npy"
-    metadata_file = "Yale_31_32_metadata.npy"
+    # adj_file = "Yale_31_32_adj.npy"
+    # core_file = "Yale_31_32_core.npy"
+    # fringe_file = "Yale_31_32_fringe.npy"
+    # metadata_file = "Yale_31_32_metadata.npy"
     # expected_core_size = 976
     # expected_core_core_edges = 33634
     # expected_core_fringe_edges = 27304
@@ -519,8 +592,12 @@ if __name__ == "__main__":
     #     expected_core_core_edges,
     #     expected_core_fringe_edges
     # )
-    core_indices = np.load(core_file)
-    beta_core_only = link_logistic_regression(adj_file, core_file, fringe_file, metadata_file, core_only=True)
-    beta_core_fringe = link_logistic_regression(adj_file, core_file, fringe_file, metadata_file, core_only=False)
-    print("Correlation:", np.corrcoef(beta_core_only, beta_core_fringe[core_indices])[0, 1])
-    plot_beta_comparison(beta_core_only, beta_core_fringe[core_indices], "Yale_31_32")
+    # core_indices = np.load(core_file)
+    # beta_core_only = link_logistic_regression(adj_file, core_file, fringe_file, metadata_file, core_only=True)
+    # beta_core_fringe = link_logistic_regression(adj_file, core_file, fringe_file, metadata_file, core_only=False)
+    # print("Correlation:", np.corrcoef(beta_core_only, beta_core_fringe[core_indices])[0, 1])
+    # plot_beta_comparison(beta_core_only, beta_core_fringe[core_indices], "Yale_31_32")
+    # padded_beta_core_only = np.full_like(beta_core_fringe, np.nan)
+    # padded_beta_core_only[core_indices] = beta_core_only
+    # plot_beta_comparison(padded_beta_core_only, beta_core_fringe, "Yale_31_32_padded")
+    pipeline()
