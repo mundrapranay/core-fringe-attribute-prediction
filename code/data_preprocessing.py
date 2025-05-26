@@ -144,45 +144,61 @@ def create_iid_core_fringe_graph(adj_matrix, k, seed=None):
     """
     if seed is not None:
         np.random.seed(seed)
-    n = adj_matrix.shape[0]
-    core_indices = np.random.choice(n, size=k, replace=False)
-    is_core = np.zeros(n, dtype=bool)
+    
+    core_indices = np.random.choice(adj_matrix.shape[0], size=k, replace=False)
+    is_core = np.zeros(adj_matrix.shape[0], dtype=bool)
     is_core[core_indices] = True
-    
-    adj_matrix = csr_matrix(adj_matrix)
-    neighbors = adj_matrix[core_indices].nonzero()[1]
-    fringe_indices = np.setdiff1d(np.unique(neighbors), core_indices)
-    
-    mask = np.zeros_like(adj_matrix.toarray(), dtype=bool)
-    # Core-core edges
-    for i in core_indices:
-        for j in core_indices:
-            if adj_matrix[i, j]:
-                mask[i, j] = True
-                mask[j, i] = True
-    # Core-fringe edges
-    for i in core_indices:
-        for j in fringe_indices:
-            if adj_matrix[i, j]:
-                mask[i, j] = True
-                mask[j, i] = True
 
-    core_fringe_adj = csr_matrix(adj_matrix.multiply(mask))
+    A = csr_matrix(adj_matrix)
+    total_edges_original = int(A.nnz / 2)
+    print(f"Total edges in original adjacency: {total_edges_original}")
+    neighbors = A[core_indices].nonzero()[1]
+    fringe_indices = np.setdiff1d(np.unique(neighbors), core_indices)
+
+    # Build a mask that keeps only core-core and core-fringe edges.
+    # Create sparse mask matrix
+    mask_data = []
+    mask_rows = []
+    mask_cols = []
     
-    num_core_nodes = len(core_indices)
-    num_core_edges = int(np.sum(core_fringe_adj[core_indices][:, core_indices]) / 2)
+    # Add core-core edges
+    core_core_edges = A[core_indices][:, core_indices]
+    for i, j in zip(core_core_edges.nonzero()[0], core_core_edges.nonzero()[1]):
+        mask_rows.extend([core_indices[i], core_indices[j]])
+        mask_cols.extend([core_indices[j], core_indices[i]])
+        mask_data.extend([1, 1])
+    
+    # Add core-fringe edges
+    core_fringe_edges = A[core_indices][:, fringe_indices]
+    for i, j in zip(core_fringe_edges.nonzero()[0], core_fringe_edges.nonzero()[1]):
+        mask_rows.extend([core_indices[i], fringe_indices[j]])
+        mask_cols.extend([fringe_indices[j], core_indices[i]])
+        mask_data.extend([1, 1])
+
+    # Create sparse mask matrix
+    mask = csr_matrix((mask_data, (mask_rows, mask_cols)), shape=A.shape)
+
+    core_fringe_adj = A.multiply(mask)
+
+    print(f"IID core")
+    print(f"Core size: {len(core_indices)}")
+    core_core_edges = int(np.sum(core_fringe_adj[core_indices][:, core_indices]) / 2)
     core_fringe_edges = int(np.sum(core_fringe_adj[core_indices][:, fringe_indices]) / 2)
-    
-    print(f"IID Core size: {num_core_nodes}")
-    print(f"Number of core-core edges: {num_core_edges}")
+    print(f"Number of core-core edges: {core_core_edges}")
     print(f"Number of core-fringe edges: {core_fringe_edges}")
     
+    # Calculate number of fringe-fringe edges lost
+    fringe_fringe_edges = total_edges_original - (core_core_edges + core_fringe_edges)
+    print(f"Number of fringe-fringe edges (lost): {fringe_fringe_edges}")
+
     # After constructing core_fringe_adj
     fringe_adj = core_fringe_adj[fringe_indices, :][:, fringe_indices]
     assert fringe_adj.nnz == 0, "Fringe-fringe edges exist in the core-fringe adjacency matrix!"
 
     return core_fringe_adj, core_indices, fringe_indices
 
+
+    
 def create_multi_dorm_core_fringe_graph(adj_matrix, metadata, target_dorm_ids):
     """
     Creates a core-fringe graph for a given list of dormIDs.
@@ -556,7 +572,46 @@ def plot_auc(auc_scores, acc_scores, percentages, tag):
     plt.savefig(f"../figures/{tag}_acc_comparison.png")
     plt.close()
 
-
+def iid_pipeline():
+    file_ext = '.mat'
+    auc_scores = {
+        'cc' : [],
+        'cf' : [],
+        'cfed' : []
+    }
+    acc_scores = {  
+        'cc' : [],
+        'cf' : [],
+        'cfed' : []
+    }
+    
+    for f in listdir(fb_code_path):
+        if f.endswith(file_ext):
+            print(f)
+            adj_matrix, metadata = parse_fb100_mat_file(path_join(fb_code_path, f))
+            assortativity = nx.degree_assortativity_coefficient(nx.from_numpy_array(adj_matrix))
+            print(f"Assortativity: {assortativity}")
+            # break
+            core_fringe_adj, core_indices, fringe_indices = create_iid_core_fringe_graph(adj_matrix, 975, seed=42)
+            percentages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+            lr_kwargs = {'C': 0.01, 'solver': 'newton-cg', 'max_iter': 1000}
+            for p in percentages:
+                labelled_core_indices = np.random.choice(core_indices, size=int(p * len(core_indices)), replace=False)
+                beta_core_only, acc_core_only, auc_core_only = link_logistic_regression_pipeline(core_fringe_adj, labelled_core_indices, fringe_indices, metadata, core_only=True, lr_kwargs=lr_kwargs)
+                beta_core_fringe, acc_core_fringe, auc_core_fringe = link_logistic_regression_pipeline(core_fringe_adj, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs)
+                beta_cfed, acc_cfed, auc_cfed = link_logistic_regression_pipeline(core_fringe_adj, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, iid_core=True)
+                # print("Correlation:", np.corrcoef(beta_core_only, beta_core_fringe[labelled_core_indices])[0, 1])
+                padded_beta_core_only = np.full_like(beta_core_fringe, np.nan)
+                padded_beta_core_only[labelled_core_indices] = beta_core_only
+                plot_beta_comparison(beta_core_fringe, padded_beta_core_only, f"Yale_31_32_iid_pipeline_padded_{p}")
+                auc_scores['cc'].append(auc_core_only)
+                auc_scores['cf'].append(auc_core_fringe)
+                auc_scores['cfed'].append(auc_cfed)
+                acc_scores['cc'].append(acc_core_only)
+                acc_scores['cf'].append(acc_core_fringe)
+                acc_scores['cfed'].append(acc_cfed)
+    plot_auc(auc_scores, acc_scores, percentages, f"Yale_31_32_iid_pipeline")
+            # plot_beta_comparison(beta_core_fringe, beta_core_only, f"Yale_31_32_iid_pipeline")
 # def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False):
 #     # Get gender and dorm information
 #     gender = metadata[:, 1]
@@ -689,4 +744,5 @@ if __name__ == "__main__":
     # padded_beta_core_only = np.full_like(beta_core_fringe, np.nan)
     # padded_beta_core_only[core_indices] = beta_core_only
     # plot_beta_comparison(padded_beta_core_only, beta_core_fringe, "Yale_31_32_padded")
-    pipeline()
+    # pipeline()
+    iid_pipeline()
