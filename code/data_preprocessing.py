@@ -1,5 +1,6 @@
 from __future__ import division
 # from define_paths import * 
+from methods import *
 import os
 from os import listdir
 from os.path import join as path_join
@@ -11,7 +12,6 @@ from scipy.special import comb
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
-from methods import *
 import random
 import math
 
@@ -509,12 +509,16 @@ def pipeline():
     auc_scores = {
         'cc' : [],
         'cf' : [],
-        'cfed' : []
+        'cfed' : [],
+        'cfed_naive' : [],  
+        'node2vec' : []
     }
     acc_scores = {
         'cc' : [],
         'cf' : [],
-        'cfed' : []
+        'cfed' : [],
+        'cfed_naive' : [],
+        'node2vec' : []
     }
 
     for f in listdir(fb_code_path):
@@ -525,21 +529,28 @@ def pipeline():
             adj_matrix, core_indices, fringe_indices = create_multi_dorm_core_fringe_graph(adj_matrix, metadata, chosen_dorms_list)
             percentages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
             lr_kwargs = {'C': 0.01, 'solver': 'newton-cg', 'max_iter': 1000}
+            embed_kwargs={'dimensions': 32, 'walk_length': 40, 'num_walks': 5, 'window_size': 5, 'p': 0.5, 'q': 1.0, 'alpha': 0.025}
             for p in percentages:
                 labelled_core_indices = np.random.choice(core_indices, size=int(p * len(core_indices)), replace=False)
                 beta_core_only_p, acc_cc, auc_cc = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=True, lr_kwargs=lr_kwargs)
                 beta_core_fringe_p, acc_cf, auc_cf = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs)    
                 beta_cfed, acc_cfed, auc_cfed = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True)
+                beta_cfed_naive, acc_cfed_naive, auc_cfed_naive = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, naive_degree=True)
+                beta_node2vec, acc_node2vec, auc_node2vec = node2vec_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, embed_kwargs=embed_kwargs)
                 # print("Correlation:", np.corrcoef(beta_core_only_p, beta_core_fringe_p[labelled_core_indices])[0, 1])
-                padded_beta_core_only = np.full_like(beta_core_fringe_p, np.nan)
-                padded_beta_core_only[labelled_core_indices] = beta_core_only_p
-                plot_beta_comparison(beta_core_fringe_p, padded_beta_core_only, f"Yale_31_32_pipeline_padded_{p}")
+                # padded_beta_core_only = np.full_like(beta_core_fringe_p, np.nan)
+                # padded_beta_core_only[labelled_core_indices] = beta_core_only_p
+                # plot_beta_comparison(beta_core_fringe_p, padded_beta_core_only, f"Yale_31_32_pipeline_padded_{p}")
                 auc_scores['cc'].append(auc_cc)
                 auc_scores['cf'].append(auc_cf)
                 auc_scores['cfed'].append(auc_cfed)
+                auc_scores['cfed_naive'].append(auc_cfed_naive)
+                auc_scores['node2vec'].append(auc_node2vec) 
                 acc_scores['cc'].append(acc_cc)
                 acc_scores['cf'].append(acc_cf)
                 acc_scores['cfed'].append(acc_cfed)
+                acc_scores['cfed_naive'].append(acc_cfed_naive) 
+                acc_scores['node2vec'].append(acc_node2vec)
             # beta_core_only = link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=True)
             # beta_core_fringe = link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False)
             # print("Correlation:", np.corrcoef(beta_core_only, beta_core_fringe[core_indices])[0, 1])
@@ -551,6 +562,8 @@ def plot_auc(auc_scores, acc_scores, percentages, tag):
     plt.plot(percentages, auc_scores['cc'], label='Core-Core', marker='o')
     plt.plot(percentages, auc_scores['cf'], label='Core-Fringe', marker='o')
     plt.plot(percentages, auc_scores['cfed'], label='Core-Fringe (Expected Degree)', marker='o')
+    plt.plot(percentages, auc_scores['cfed_naive'], label='Core-Fringe (Naive Expected Degree)', marker='o')
+    plt.plot(percentages, auc_scores['node2vec'], label='Node2Vec', marker='o')
     plt.xlabel('Percentage of Core Nodes Used for Training')
     plt.xticks(percentages)
     plt.ylabel('AUC')
@@ -564,6 +577,8 @@ def plot_auc(auc_scores, acc_scores, percentages, tag):
     plt.plot(percentages, acc_scores['cc'], label='Core-Core', marker='o')
     plt.plot(percentages, acc_scores['cf'], label='Core-Fringe', marker='o')
     plt.plot(percentages, acc_scores['cfed'], label='Core-Fringe (Expected Degree)', marker='o')
+    plt.plot(percentages, acc_scores['cfed_naive'], label='Core-Fringe (Naive Expected Degree)', marker='o')
+    plt.plot(percentages, acc_scores['node2vec'], label='Node2Vec', marker='o')
     plt.xlabel('Percentage of Core Nodes Used for Training')
     plt.xticks(percentages)
     plt.ylabel('Accuracy')
@@ -577,12 +592,16 @@ def iid_pipeline():
     auc_scores = {
         'cc' : [],
         'cf' : [],
-        'cfed' : []
+        'cfed' : [],
+        'cfed_naive' : [],
+        'node2vec' : []
     }
     acc_scores = {  
         'cc' : [],
         'cf' : [],
-        'cfed' : []
+        'cfed' : [],
+        'cfed_naive' : [],
+        'node2vec' : []
     }
     
     for f in listdir(fb_code_path):
@@ -595,23 +614,31 @@ def iid_pipeline():
             core_fringe_adj, core_indices, fringe_indices = create_iid_core_fringe_graph(adj_matrix, 975, seed=42)
             percentages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
             lr_kwargs = {'C': 0.01, 'solver': 'newton-cg', 'max_iter': 1000}
+            embed_kwargs={'dimensions': 32, 'walk_length': 40, 'num_walks': 5, 'window_size': 5, 'p': 0.5, 'q': 1.0, 'alpha': 0.025}
             for p in percentages:
                 labelled_core_indices = np.random.choice(core_indices, size=int(p * len(core_indices)), replace=False)
                 beta_core_only, acc_core_only, auc_core_only = link_logistic_regression_pipeline(core_fringe_adj, labelled_core_indices, fringe_indices, metadata, core_only=True, lr_kwargs=lr_kwargs)
                 beta_core_fringe, acc_core_fringe, auc_core_fringe = link_logistic_regression_pipeline(core_fringe_adj, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs)
                 beta_cfed, acc_cfed, auc_cfed = link_logistic_regression_pipeline(core_fringe_adj, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, iid_core=True)
+                beta_cfed_naive, acc_cfed_naive, auc_cfed_naive = link_logistic_regression_pipeline(core_fringe_adj, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, iid_core=True, naive_degree=True)
+                beta_node2vec, acc_node2vec, auc_node2vec = node2vec_logistic_regression_pipeline(core_fringe_adj, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, embed_kwargs=embed_kwargs)
                 # print("Correlation:", np.corrcoef(beta_core_only, beta_core_fringe[labelled_core_indices])[0, 1])
-                padded_beta_core_only = np.full_like(beta_core_fringe, np.nan)
-                padded_beta_core_only[labelled_core_indices] = beta_core_only
-                plot_beta_comparison(beta_core_fringe, padded_beta_core_only, f"Yale_31_32_iid_pipeline_padded_{p}")
+                # padded_beta_core_only = np.full_like(beta_core_fringe, np.nan)
+                # padded_beta_core_only[labelled_core_indices] = beta_core_only
+                # plot_beta_comparison(beta_core_fringe, padded_beta_core_only, f"Yale_31_32_iid_pipeline_padded_{p}")
                 auc_scores['cc'].append(auc_core_only)
                 auc_scores['cf'].append(auc_core_fringe)
                 auc_scores['cfed'].append(auc_cfed)
+                auc_scores['cfed_naive'].append(auc_cfed_naive)
+                auc_scores['node2vec'].append(auc_node2vec)
                 acc_scores['cc'].append(acc_core_only)
                 acc_scores['cf'].append(acc_core_fringe)
                 acc_scores['cfed'].append(acc_cfed)
+                acc_scores['cfed_naive'].append(acc_cfed_naive)
+                acc_scores['node2vec'].append(acc_node2vec)
     plot_auc(auc_scores, acc_scores, percentages, f"Yale_31_32_iid_pipeline")
-            # plot_beta_comparison(beta_core_fringe, beta_core_only, f"Yale_31_32_iid_pipeline")
+
+
 # def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False):
 #     # Get gender and dorm information
 #     gender = metadata[:, 1]
@@ -744,5 +771,5 @@ if __name__ == "__main__":
     # padded_beta_core_only = np.full_like(beta_core_fringe, np.nan)
     # padded_beta_core_only[core_indices] = beta_core_only
     # plot_beta_comparison(padded_beta_core_only, beta_core_fringe, "Yale_31_32_padded")
-    # pipeline()
+    pipeline()
     iid_pipeline()
