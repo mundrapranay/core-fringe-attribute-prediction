@@ -56,7 +56,7 @@ def estimate_expected_degree_iid_core(adj_matrix, core_indices, fringe_indices):
 def naive_estimated_degree(adj_matrix, core_indices, fringe_indices):
     return [np.array(adj_matrix[core_indices, :].sum(axis=1)).flatten().mean()] * len(fringe_indices)
 
-def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=None, expected_degree=False, iid_core=False, naive_degree=False):
+def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=None, expected_degree=False, iid_core=False, naive_degree=False, sbm=False, p_core_fringe=0.0, p_fringe_fringe=0.0):
     # Get gender and dorm information
     gender = metadata[:, 1]
     dorm = metadata[:, 4]
@@ -81,7 +81,7 @@ def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, 
     
     # X_test = adj_matrix[fringe_indices, :][:, core_indices]
     y_test = gender[fringe_indices]
-    seed = 42
+    seed = 123
     unique_train_classes = np.unique(y_train)
     print(f"Unique training classes: {unique_train_classes}")
     if unique_train_classes.size < 2:
@@ -105,6 +105,8 @@ def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, 
             expected_degree = naive_estimated_degree(adj_matrix, core_indices, fringe_indices)
         elif iid_core:
             expected_degree = estimate_expected_degree_iid_core(adj_matrix, core_indices, fringe_indices)
+        elif sbm:
+            expected_degree = estimate_expected_degree_sbm(core_indices, fringe_indices, p_core_fringe, p_fringe_fringe=p_fringe_fringe)
         else:
             expected_degree = estimate_expected_degree_from_core(adj_matrix, core_indices, fringe_indices)
         # first_fringe_col = fringe_indices[0]
@@ -338,3 +340,22 @@ def node2vec_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indic
     accuracy = accuracy_score(y_fringe, y_test_pred)
     auc = roc_auc_score(y_fringe, y_test_scores[:, 1])
     return beta, accuracy, auc
+
+def estimate_expected_degree_sbm(core_indices, fringe_indices, p_core_fringe, p_fringe_fringe=0.0):
+    """
+    For each fringe node in an SBM, estimate its expected total degree
+    based on SBM parameters.
+
+    Parameters:
+    - core_indices: indices of core nodes
+    - fringe_indices: indices of fringe nodes
+    - p_core_fringe: probability of edge between core and fringe
+    - p_fringe_fringe: probability of edge between fringe nodes (default 0.0)
+
+    Returns:
+    - expected: np.array of shape (len(fringe_indices),), expected total degree for each fringe node
+    """
+    n_core = len(core_indices)
+    n_fringe = len(fringe_indices)
+    expected = np.full(len(fringe_indices), n_core * p_core_fringe + n_fringe * p_fringe_fringe)
+    return expected

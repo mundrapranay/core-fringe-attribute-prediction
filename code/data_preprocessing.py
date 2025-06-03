@@ -408,6 +408,58 @@ def make_core_fringe():
             create_and_save_core_fringe_graph(adj_matrix, metadata, chosen_dorms_list)
 
 
+def core_fringe_sbm(n_core, n_fringe, p_core_core, p_core_fringe, p_fringe_fringe, seed=42):
+    """
+    Creates a core-fringe graph using a stochastic block model.
+    
+    Parameters:
+      - n_core (int): number of core nodes
+      - n_fringe (int): number of fringe nodes
+      - p_core_core (float): probability of edge between core nodes
+      - p_core_fringe (float): probability of edge between core and fringe nodes
+      - p_fringe_fringe (float): probability of edge between fringe nodes
+      - seed (int, optional): random seed
+      
+    Returns:
+      (adj_matrix, core_indices, fringe_indices, metadata)
+         adj_matrix: numpy array of the adjacency matrix
+         core_indices: array of indices for core nodes
+         fringe_indices: array of indices for fringe nodes
+         metadata: array containing node attributes (gender in column 1)
+    """
+    probs = [[p_core_core, p_core_fringe], [p_core_fringe, p_fringe_fringe]]
+    total_nodes = [n_core, n_fringe]
+    G = nx.stochastic_block_model(total_nodes, probs, seed=seed)
+    
+    # Create metadata array with gender information
+    # Initialize metadata array with zeros (7 columns to match FB100 format)
+    metadata = np.zeros((n_core + n_fringe, 7))
+    
+    # Set random seed for reproducibility
+    np.random.seed(seed)
+    
+    # Randomly assign genders to core nodes (50% gender 1, 50% gender 2)
+    core_genders = np.random.choice([1, 2], size=n_core, replace=True)
+    # genders = np.random.choice([1, 2], size=n_core + n_fringe, replace=True)
+    
+    # Set gender values
+    for node in G.nodes():
+        if node < n_core:  # Core node
+            G.nodes[node]['gender'] = core_genders[node]
+        else:  # Fringe node
+            G.nodes[node]['gender'] = 2
+        # G.nodes[node]['gender'] = genders[node]
+        metadata[node, 1] = G.nodes[node]['gender']  # Column 1 for gender
+    
+    # Convert graph to adjacency matrix
+    adj_matrix = nx.to_numpy_array(G)
+    
+    # Define core and fringe indices
+    core_indices = np.arange(n_core)
+    fringe_indices = np.arange(n_core, n_core + n_fringe)
+    
+    return adj_matrix, core_indices, fringe_indices, metadata
+
 def link_logistic_regression(adj_file, core_file, fringe_file, metadata_file, core_only=False):
     adj_matrix, core_indices, fringe_indices, metadata = load_core_fringe_graph(adj_file, core_file, fringe_file, metadata_file)
 
@@ -607,11 +659,12 @@ def iid_pipeline():
     for f in listdir(fb_code_path):
         if f.endswith(file_ext):
             print(f)
-            adj_matrix, metadata = parse_fb100_mat_file(path_join(fb_code_path, f))
+            # adj_matrix, metadata = parse_fb100_mat_file(path_join(fb_code_path, f))
+            adj_matrix, metadata = sbm_gender_homophily_adj_and_metadata(300, 300, 0.8, 0.2, seed=42)
             assortativity = nx.degree_assortativity_coefficient(nx.from_numpy_array(adj_matrix))
             print(f"Assortativity: {assortativity}")
             # break
-            core_fringe_adj, core_indices, fringe_indices = create_iid_core_fringe_graph(adj_matrix, 975, seed=42)
+            core_fringe_adj, core_indices, fringe_indices = create_iid_core_fringe_graph(adj_matrix, 300, seed=42)
             percentages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
             lr_kwargs = {'C': 0.01, 'solver': 'newton-cg', 'max_iter': 1000}
             embed_kwargs={'dimensions': 32, 'walk_length': 40, 'num_walks': 5, 'window_size': 5, 'p': 0.5, 'q': 1.0, 'alpha': 0.025}
@@ -625,7 +678,7 @@ def iid_pipeline():
                 # print("Correlation:", np.corrcoef(beta_core_only, beta_core_fringe[labelled_core_indices])[0, 1])
                 # padded_beta_core_only = np.full_like(beta_core_fringe, np.nan)
                 # padded_beta_core_only[labelled_core_indices] = beta_core_only
-                # plot_beta_comparison(beta_core_fringe, padded_beta_core_only, f"Yale_31_32_iid_pipeline_padded_{p}")
+                # plot_beta_comparison(beta_core_fringe, padded_beta_core_only, f"SBM_gender_homophily_iid_pipeline_padded_{p}")
                 auc_scores['cc'].append(auc_core_only)
                 auc_scores['cf'].append(auc_core_fringe)
                 auc_scores['cfed'].append(auc_cfed)
@@ -636,59 +689,127 @@ def iid_pipeline():
                 acc_scores['cfed'].append(acc_cfed)
                 acc_scores['cfed_naive'].append(acc_cfed_naive)
                 acc_scores['node2vec'].append(acc_node2vec)
-    plot_auc(auc_scores, acc_scores, percentages, f"Yale_31_32_iid_pipeline")
+    plot_auc(auc_scores, acc_scores, percentages, f"SBM_gender_homophily_iid")
 
+def sbm_pipeline():
+    file_ext = '.mat'
+    auc_scores = {
+        'cc' : [],
+        'cf' : [],
+        'cfed' : [],
+        'cfed_naive' : [],
+        'node2vec' : []
+    }
+    acc_scores = {
+        'cc' : [],
+        'cf' : [],
+        'cfed' : [],    
+        'cfed_naive' : [],
+        'node2vec' : []
+    }
+    
+    for f in listdir(fb_code_path):
+        if f.endswith(file_ext):
+            print(f)
+            adj_matrix, core_indices, fringe_indices, metadata = core_fringe_sbm(150, 50, 0.8, 0.2, 0.0, seed=123)
+            percentages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+            lr_kwargs = {'C': 0.01, 'solver': 'newton-cg', 'max_iter': 1000}
+            embed_kwargs={'dimensions': 32, 'walk_length': 40, 'num_walks': 5, 'window_size': 5, 'p': 0.5, 'q': 1.0, 'alpha': 0.025}
+            for p in percentages:
+                labelled_core_indices = np.random.choice(core_indices, size=int(p * len(core_indices)), replace=False)
+                beta_core_only, acc_core_only, auc_core_only = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=True, lr_kwargs=lr_kwargs)
+                beta_core_fringe, acc_core_fringe, auc_core_fringe = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs)
+                beta_cfed, acc_cfed, auc_cfed = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, sbm=True, p_core_fringe=0.8, p_fringe_fringe=0.0)
+                beta_cfed_naive, acc_cfed_naive, auc_cfed_naive = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, sbm=True, p_core_fringe=0.8, p_fringe_fringe=0.0, naive_degree=True)
+                beta_node2vec, acc_node2vec, auc_node2vec = node2vec_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, embed_kwargs=embed_kwargs)
+                print("Correlation:", np.corrcoef(beta_core_only, beta_core_fringe[labelled_core_indices])[0, 1])
+                padded_beta_core_only = np.full_like(beta_core_fringe, np.nan)
+                padded_beta_core_only[labelled_core_indices] = beta_core_only
+                plot_beta_comparison(beta_core_fringe, padded_beta_core_only, f"SBM_padded_{p}")
+                auc_scores['cc'].append(auc_core_only)
+                auc_scores['cf'].append(auc_core_fringe)
+                auc_scores['cfed'].append(auc_cfed)
+                auc_scores['cfed_naive'].append(auc_cfed_naive)
+                auc_scores['node2vec'].append(auc_node2vec)
+                acc_scores['cc'].append(acc_core_only)
+                acc_scores['cf'].append(acc_core_fringe)
+                acc_scores['cfed'].append(acc_cfed)
+                acc_scores['cfed_naive'].append(acc_cfed_naive)
+                acc_scores['node2vec'].append(acc_node2vec)
+    plot_auc(auc_scores, acc_scores, percentages, f"SBM_pipeline")
 
-# def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False):
-#     # Get gender and dorm information
-#     gender = metadata[:, 1]
-#     dorm = metadata[:, 4]
+def fringe_inclusion_pipeline_and_plot(n_core=150, n_fringe=50, p_core_core=0.8, p_core_fringe=0.2, p_fringe_fringe=0.0, n_steps=5, lr_kwargs=None, tag="SBM_fringe_inclusion"):
+    """
+    For each file in fb_code_path, generate a new SBM core-fringe graph.
+    For each step, train only on core_indices (not including any fringe in training), but incrementally add more core-fringe edges to the adjacency (i.e., more of the core-fringe block is revealed).
+    Always test on the full fringe set.
+    Plots accuracy and AUC for Core-Fringe and Core-Fringe-Expected Degree models.
+    """
+    import matplotlib.pyplot as plt
+    if lr_kwargs is None:
+        lr_kwargs = {'C': 0.01, 'solver': 'newton-cg', 'max_iter': 1000}
+    auc_scores = {'cf': [], 'cfed': [], 'cc': []}
+    acc_scores = {'cf': [], 'cfed': [], 'cc': []}
+    fringe_pct = []
+    file_ext = '.mat'
+    for f in listdir(fb_code_path):
+        if f.endswith(file_ext):
+            print(f)
+            adj_matrix, core_indices, fringe_indices, metadata = core_fringe_sbm(n_core, n_fringe, p_core_core, p_core_fringe, p_fringe_fringe, seed=123)
+            n_fringe = len(fringe_indices)
+            step_size = n_fringe // n_steps
+            for i in range(0, n_steps + 1):
+                n_train_fringe = i * step_size if i < n_steps else n_fringe
+                revealed_fringe = fringe_indices[:n_train_fringe]
+                train_indices = np.concatenate([core_indices, revealed_fringe])
 
-#     # Create core-only adjacency matrix
-#     if core_only:
-#         X_train = adj_matrix[core_indices, :][:, core_indices]
-#         y_train = gender[core_indices]
-#         X_test = adj_matrix[fringe_indices, :][:, core_indices]
-#         print("\n Feature Space (Core-Core only)")
-#         print(f"X_train shape: {X_train.shape}")
-#         print(f"y_train shape: {y_train.shape}")
-#         # print(f"Number of non-zero elements in X_train: {X_train.nnz}")
-#     else:
-#         X_train = adj_matrix[core_indices, :]
-#         y_train = gender[core_indices]
-#         X_test = adj_matrix[fringe_indices, :]
-#         print("\n Feature Space (Core-Fringe)")
-#         print(f"X_train shape: {X_train.shape}")
-#         print(f"y_train shape: {y_train.shape}")
-#         # print(f"Number of non-zero elements in X_train: {X_train.nnz}")
-    
-#     # X_test = adj_matrix[fringe_indices, :][:, core_indices]
-#     y_test = gender[fringe_indices]
-#     seed = 42
-#     unique_train_classes = np.unique(y_train)
-#     print(f"Unique training classes: {unique_train_classes}")
-#     if unique_train_classes.size < 2:
-#         print("Not enough unique classes for training. Skipping logistic regression.")
-#         return
-    
-#     # Train logistic regression model
-#     lr_kwargs = {'C': 0.1, 'solver': 'liblinear', 'max_iter': 1000}
-#     model = LogisticRegression(**lr_kwargs, random_state=seed)
-#     model.fit(X_train, y_train)
-#     beta = model.coef_.flatten()
-#     print(f"Number of non-zero coefficients: {np.count_nonzero(beta)}")
-#     print(f"Mean absolute coefficient: {np.mean(np.abs(beta)):.4f}")
-#     print(f"Max coefficient: {np.max(np.abs(beta)):.4f}")
-#     print(f"Min coefficient: {np.min(np.abs(beta)):.4f}")
-#     print(f"Max coefficient (No-Abs): {np.max(beta):.4f}")
-#     print(f"Min coefficient (No-Abs): {np.min(beta):.4f}")
-    
-#     # Make predictions on test set
-#     y_test_pred = model.predict(X_test)
-#     y_test_scores = model.predict_proba(X_test)
-#     print(f"Test Accuracy: {accuracy_score(y_test, y_test_pred):.4f}")
-#     print(f"Test ROC AUC: {roc_auc_score(y_test, y_test_scores[:, 1]):.4f}")
-#     return beta
+                # Core-Fringe model
+                _, acc_cf, auc_cf = link_logistic_regression_pipeline(
+                    adj_matrix, train_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs
+                )
+
+                # Core-Fringe Expected Degree model
+                _, acc_cfed, auc_cfed = link_logistic_regression_pipeline(
+                    adj_matrix, train_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs,
+                    expected_degree=True, sbm=True, p_core_fringe=p_core_fringe, p_fringe_fringe=p_fringe_fringe
+                )
+
+                _, acc_cc, auc_cc = link_logistic_regression_pipeline(
+                    adj_matrix, core_indices, fringe_indices, metadata, core_only=True, lr_kwargs=lr_kwargs
+                )
+                auc_scores['cf'].append(auc_cf)
+                auc_scores['cfed'].append(auc_cfed)
+                auc_scores['cc'].append(auc_cc)
+                acc_scores['cf'].append(acc_cf)
+                acc_scores['cfed'].append(acc_cfed)
+                acc_scores['cc'].append(acc_cc)
+                fringe_pct.append(n_train_fringe / n_fringe)
+                print(f"Step {i}: Revealed {n_train_fringe} fringe, tested on {n_fringe} fringe")
+    # Plotting
+    plt.figure(figsize=(10, 5))
+    plt.plot(fringe_pct, auc_scores['cf'], label='Core-Fringe', marker='o')
+    plt.plot(fringe_pct, auc_scores['cfed'], label='Core-Fringe (Expected Degree)', marker='o')
+    plt.plot(fringe_pct, auc_scores['cc'], label='Core-Core', marker='o')
+    plt.xticks(fringe_pct)
+    plt.xlabel('Fraction of Fringe Nodes with Revealed Edges')
+    plt.ylabel('AUC')
+    plt.title(f'AUC vs. Fringe Edge Reveal Fraction ({tag})')
+    plt.legend()
+    plt.savefig(f"../figures/{tag}_auc_comparison.png")
+    plt.cla()
+    plt.clf()
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(fringe_pct, acc_scores['cf'], label='Core-Fringe', marker='o')
+    plt.plot(fringe_pct, acc_scores['cfed'], label='Core-Fringe (Expected Degree)', marker='o')
+    plt.plot(fringe_pct, acc_scores['cc'], label='Core-Core', marker='o')
+    plt.xlabel('Fraction of Fringe Nodes with Revealed Edges')
+    plt.xticks(fringe_pct)
+    plt.ylabel('Accuracy')
+    plt.title(f'Accuracy vs. Fringe Edge Reveal Fraction ({tag})')
+    plt.legend()
+    plt.savefig(f"../figures/{tag}_acc_comparison.png")
+    plt.close()
 
 def plot_beta_comparison(beta_all, beta_core, tag):
     """
@@ -745,6 +866,59 @@ def plot_beta_comparison(beta_all, beta_core, tag):
     plt.close(fig)
     print(f"Saved XY comparison plot to {fname_xy}")
 
+def core_fringe_sbm_gender_homophily(n_core, n_fringe, p_core_core, p_core_fringe, p_fringe_fringe, seed=42):
+    """
+    Creates a core-fringe SBM with gender homophily:
+    - All core nodes are gender 1
+    - All fringe nodes are gender 2
+    - SBM edge probabilities as specified
+
+    Returns:
+      (adj_matrix, core_indices, fringe_indices, metadata)
+    """
+    import numpy as np
+    import networkx as nx
+    # Define SBM parameters
+    probs = [[p_core_core, p_core_fringe], [p_core_fringe, p_fringe_fringe]]
+    total_nodes = [n_core, n_fringe]
+    G = nx.stochastic_block_model(total_nodes, probs, seed=seed)
+
+    # Metadata: 7 columns, gender in column 1
+    metadata = np.zeros((n_core + n_fringe, 7))
+    # Assign gender: core = 1, fringe = 2
+    metadata[:n_core, 1] = 1
+    metadata[n_core:, 1] = 2
+    for node in G.nodes():
+        if node < n_core:
+            G.nodes[node]['gender'] = 1
+        else:
+            G.nodes[node]['gender'] = 2
+    adj_matrix = nx.to_numpy_array(G)
+    core_indices = np.arange(n_core)
+    fringe_indices = np.arange(n_core, n_core + n_fringe)
+    return adj_matrix, core_indices, fringe_indices, metadata
+
+def sbm_gender_homophily_adj_and_metadata(n_g1, n_g2, p_in, p_out, seed=42):
+    """
+    Generate an SBM with two gender blocks (gender homophily):
+    - Half nodes are gender 1, half are gender 2
+    - High in-gender (within-block) probability, low out-gender (between-block) probability
+    Returns:
+      adj_matrix: adjacency matrix (numpy array)
+      metadata: metadata array (gender in column 1, 7 columns total)
+    """
+    import numpy as np
+    import networkx as nx
+    np.random.seed(seed)
+    sizes = [n_g1, n_g2]
+    probs = [[p_in, p_out], [p_out, p_in]]
+    G = nx.stochastic_block_model(sizes, probs, seed=seed)
+    adj_matrix = nx.to_numpy_array(G)
+    metadata = np.zeros((n_g1 + n_g2, 7))
+    metadata[:n_g1, 1] = 1  # First block: gender 1
+    metadata[n_g1:, 1] = 2  # Second block: gender 2
+    return adj_matrix, metadata
+
 if __name__ == "__main__":
     # make_core_fringe()
     # Update these values based on your actual saved files and stats
@@ -771,5 +945,9 @@ if __name__ == "__main__":
     # padded_beta_core_only = np.full_like(beta_core_fringe, np.nan)
     # padded_beta_core_only[core_indices] = beta_core_only
     # plot_beta_comparison(padded_beta_core_only, beta_core_fringe, "Yale_31_32_padded")
-    pipeline()
+    # pipeline()
     iid_pipeline()
+    # core_fringe_sbm(150, 50, 0.8, 0.2, 0.0)
+    # adj_matrix, core_indices, fringe_indices, metadata = core_fringe_sbm(150, 50, 0.8, 0.2, 0.0, seed=123)
+    # fringe_inclusion_pipeline_and_plot(n_core=300, n_fringe=100, p_core_core=0.8, p_core_fringe=0.2, p_fringe_fringe=0.0, n_steps=10, lr_kwargs=None, tag="SBM_fringe_inclusion")
+    # sbm_pipeline()
