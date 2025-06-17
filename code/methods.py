@@ -5,7 +5,9 @@ import random
 import networkx as nx
 from gensim.models import Word2Vec
 from scipy.sparse import csr_matrix
-
+from collections import Counter
+from sklearn.utils import resample
+from fringe_edge_predictions import *
 
 def estimate_expected_degree_from_core(adj_matrix, core_indices, fringe_indices):
     """
@@ -53,15 +55,24 @@ def estimate_expected_degree_iid_core(adj_matrix, core_indices, fringe_indices):
     return expected
 
 
+def iid_sbm_expected_degree(adj_matrix, core_indices, fringe_indices, n1, n2, p_in, p_out):
+    expected_degrees = [((len(core_indices) + len(fringe_indices) - 1)/(n1+n2-1)) * (((n1 * (n1 -1) + n2*(n2-1))/(n1 +n2))*p_in + (2*n1*n2*p_out)/(n1+n2))] * len(fringe_indices)
+    deg_to_core = np.array(adj_matrix[fringe_indices, :][:, core_indices].sum(axis=1)).flatten()
+    return [(e-d) for e,d in zip(expected_degrees, deg_to_core)]
+
+
 def naive_estimated_degree(adj_matrix, core_indices, fringe_indices):
     return [np.array(adj_matrix[core_indices, :].sum(axis=1)).flatten().mean()] * len(fringe_indices)
 
-def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=None, expected_degree=False, iid_core=False, naive_degree=False, sbm=False, p_core_fringe=0.0, p_fringe_fringe=0.0):
+def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=None, expected_degree=False, iid_core=False, naive_degree=False, sbm=False, ff=False, ff_value=None, p_core_fringe=0.0, p_fringe_fringe=0.0, return_auc_ci=False, plot_auc_ci=False):
     # Get gender and dorm information
-    gender = metadata[:, 1]
+    gender = metadata[:, 1].astype(int)  # Convert to integer
     dorm = metadata[:, 4]
 
     # Create core-only adjacency matrix
+    if ff:
+        adj_matrix[fringe_indices, :][:, fringe_indices] = ff_value
+
     if core_only:
         X_train = adj_matrix[core_indices, :][:, core_indices]
         y_train = gender[core_indices]
@@ -69,7 +80,6 @@ def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, 
         print("\n Feature Space (Core-Core only)")
         print(f"X_train shape: {X_train.shape}")
         print(f"y_train shape: {y_train.shape}")
-        # print(f"Number of non-zero elements in X_train: {X_train.nnz}")
     else:
         X_train = adj_matrix[core_indices, :]
         y_train = gender[core_indices]
@@ -77,9 +87,7 @@ def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, 
         print("\n Feature Space (Core-Fringe)")
         print(f"X_train shape: {X_train.shape}")
         print(f"y_train shape: {y_train.shape}")
-        # print(f"Number of non-zero elements in X_train: {X_train.nnz}")
     
-    # X_test = adj_matrix[fringe_indices, :][:, core_indices]
     y_test = gender[fringe_indices]
     seed = 123
     unique_train_classes = np.unique(y_train)
@@ -88,10 +96,33 @@ def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, 
         print("Not enough unique classes for training. Skipping logistic regression.")
         return
     
+    # # Analyze feature space
+    # print("\nFeature Space Analysis:")
+    # # For each class, calculate mean degree to all nodes
+    # for class_label in unique_train_classes:
+    #     class_mask = (y_train == class_label)
+    #     mean_degree = X_train[class_mask].sum(axis=1).mean()
+    #     print(f"Mean degree of class {class_label} nodes: {mean_degree:.2f}")
+    
+    # # Calculate homophily (degree within same class)
+    # for class_label in unique_train_classes:
+    #     class_mask = (y_train == class_label)
+    #     if core_only:
+    #         # In core-only, both axes are core nodes, so use class_mask for both
+    #         class_submatrix = X_train[class_mask][:, class_mask]
+    #         mean_same_class_degree = class_submatrix.sum(axis=1).mean()
+    #     else:
+    #         # In core-fringe, columns are all nodes, so use core_indices for columns
+    #         class_submatrix = X_train[class_mask][:, core_indices]
+    #         same_class_mask = (y_train == class_label)
+    #         mean_same_class_degree = class_submatrix[:, same_class_mask].sum(axis=1).mean()
+    #     print(f"Mean degree of class {class_label} nodes to same class: {mean_same_class_degree:.2f}")
+    
     # Train logistic regression model
     model = LogisticRegression(**lr_kwargs, random_state=seed)
     model.fit(X_train, y_train)
     beta = model.coef_.flatten()
+    print(f"\nModel Analysis:")
     print(f"Number of non-zero coefficients: {np.count_nonzero(beta)}")
     print(f"Mean absolute coefficient: {np.mean(np.abs(beta)):.4f}")
     print(f"Max coefficient: {np.max(np.abs(beta)):.4f}")
@@ -106,28 +137,69 @@ def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, 
         elif iid_core:
             expected_degree = estimate_expected_degree_iid_core(adj_matrix, core_indices, fringe_indices)
         elif sbm:
-            expected_degree = estimate_expected_degree_sbm(core_indices, fringe_indices, p_core_fringe, p_fringe_fringe=p_fringe_fringe)
+            # expected_degree = estimate_expected_degree_sbm(core_indices, fringe_indices, p_core_fringe, p_fringe_fringe=p_fringe_fringe)
+            # expected_degree = iid_sbm_expected_degree(adj_matrix, core_indices, fringe_indices, 500, 500, 0.15, 0.1)
+            adj_matrix_imputed = expected_degree_imputation(adj_matrix, core_indices, fringe_indices, 500, 500, 0.15, 0.1)
+            X_test = adj_matrix_imputed[fringe_indices, :]
         else:
             expected_degree = estimate_expected_degree_from_core(adj_matrix, core_indices, fringe_indices)
-        # first_fringe_col = fringe_indices[0]
-        # X_test[np.arange(len(fringe_indices)), first_fringe_col] = expected_degree
-        for i, deg in enumerate(expected_degree):
-            # For each fringe node (row i)
-            k = int(round(deg))
-            if k > 0:
-                # Randomly select k columns from the fringe_indices (fringe-fringe block)
-                chosen_cols = np.random.choice(fringe_indices, size=min(k, len(fringe_indices)), replace=False)
-                X_test[i, chosen_cols] = 1
+        # for i, deg in enumerate(expected_degree):
+        #     k = int(round(deg))
+        #     if k > 0:
+        #         chosen_cols = np.random.choice(fringe_indices, size=min(k, len(fringe_indices)), replace=False)
+        #         X_test[i, chosen_cols] = 1
     
     y_test_pred = model.predict(X_test)
     y_test_scores = model.predict_proba(X_test)
+    
+    # Verify class order and AUC calculation
+    print("\nClass Order Verification:")
+    print(f"Model classes_: {model.classes_}")  # Order of classes in the model
+    print(f"Unique test classes: {np.unique(y_test)}")  # Classes in test set
+    print(f"Class distribution in test: {dict(Counter(y_test))}")
+    print(f"Prediction distribution: {dict(Counter(y_test_pred))}")
+    
+    # Calculate AUC for each class
+    for i, class_label in enumerate(model.classes_):
+        class_auc = roc_auc_score(y_test == class_label, y_test_scores[:, i])
+        print(f"AUC for class {class_label}: {class_auc:.4f}")
+    
+    # Use the correct class index for AUC
+    positive_class_idx = np.where(model.classes_ == 2)[0][0]  # Assuming 2 is our positive class
+    auc = roc_auc_score(y_test, y_test_scores[:, positive_class_idx])
     accuracy = accuracy_score(y_test, y_test_pred)
-    auc = roc_auc_score(y_test, y_test_scores[:, 1])
+    
+    # Compute AUC confidence interval
+    auc_lower, auc_upper = auc_confidence_interval(y_test, y_test_scores[:, positive_class_idx])
+    print(f"AUC 95% CI: [{auc_lower:.3f}, {auc_upper:.3f}]")
+    
+    print(f"\nFinal Results:")
     print(f"Test Accuracy: {accuracy:.4f}")
     print(f"Test ROC AUC: {auc:.4f}")
-    return beta, accuracy, auc
+    print(f"Training class distribution: {dict(Counter(y_train))}")
+    print(f"Test class distribution: {dict(Counter(y_test))}")
+    print(f"X_train sparsity: {1 - X_train.nnz / (X_train.shape[0] * X_train.shape[1]):.4f}")
+    print(f"X_test sparsity: {1 - X_test.nnz / (X_test.shape[0] * X_test.shape[1]):.4f}")
+    
+    if return_auc_ci:
+        return beta, accuracy, auc, (auc_lower, auc_upper)
+    else:
+        return beta, accuracy, auc
 
-
+def random_guesser(fringe_indices, metadata, seed):
+    """
+    Simulate a random guesser for the fringe nodes' gender.
+    For each trial, randomly guess gender (1 or 2) for each fringe node.
+    Compute AUC for each trial and return the mean and 95% CI using auc_confidence_interval.
+    """
+    rng = np.random.RandomState(seed)
+    gender = metadata[:, 1].astype(int)
+    y_true = gender[fringe_indices]
+    y_scores = rng.rand(len(fringe_indices))
+    auc = roc_auc_score(y_true, y_scores)
+    lower, upper = auc_confidence_interval(y_true, y_scores, n_bootstraps=1000, random_seed=seed)
+    print(f"Random Guesser: Mean AUC = {auc:.4f}, 95% CI = [{lower:.4f}, {upper:.4f}]")
+    return auc, (lower, upper)
 
 def alias_setup(probs):
     """
@@ -339,6 +411,14 @@ def node2vec_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indic
     y_test_scores = model.predict_proba(X_fringe)
     accuracy = accuracy_score(y_fringe, y_test_pred)
     auc = roc_auc_score(y_fringe, y_test_scores[:, 1])
+    print(f"Test Accuracy: {accuracy:.4f}")
+    print(f"Test ROC AUC: {auc:.4f}")
+    print(f"Training class distribution: {np.bincount(y_core)}")
+    print(f"Test class distribution: {np.bincount(y_fringe)}")
+    print(f"X_train sparsity: {1 - X_core.nnz / (X_core.shape[0] * X_core.shape[1]):.4f}")
+    print(f"X_test sparsity: {1 - X_fringe.nnz / (X_fringe.shape[0] * X_fringe.shape[1]):.4f}")
+    print(f"Model classes: {model.classes_}")
+    print(f"Prediction distribution: {np.bincount(y_test_pred)}")
     return beta, accuracy, auc
 
 def estimate_expected_degree_sbm(core_indices, fringe_indices, p_core_fringe, p_fringe_fringe=0.0):
@@ -359,3 +439,18 @@ def estimate_expected_degree_sbm(core_indices, fringe_indices, p_core_fringe, p_
     n_fringe = len(fringe_indices)
     expected = np.full(len(fringe_indices), n_core * p_core_fringe + n_fringe * p_fringe_fringe)
     return expected
+
+def auc_confidence_interval(y_true, y_scores, n_bootstraps=1000, random_seed=42):
+    rng = np.random.RandomState(random_seed)
+    bootstrapped_scores = []
+    for i in range(n_bootstraps):
+        indices = rng.randint(0, len(y_true), len(y_true))
+        if len(np.unique(y_true[indices])) < 2:
+            # skip if only one class in the sample
+            continue
+        score = roc_auc_score(y_true[indices], y_scores[indices])
+        bootstrapped_scores.append(score)
+    sorted_scores = np.sort(bootstrapped_scores)
+    lower = sorted_scores[int(0.025 * len(sorted_scores))]
+    upper = sorted_scores[int(0.975 * len(sorted_scores))]
+    return lower, upper
