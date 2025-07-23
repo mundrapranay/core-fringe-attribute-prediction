@@ -20,14 +20,24 @@ def plot_acc(acc_scores, percentages, tag):
 
 def plot_auc_with_ci(auc_scores, auc_cis, percentages, tag):
     import matplotlib.pyplot as plt
+    import numpy as np
+
     plt.figure(figsize=(10, 5))
     methods = list(auc_scores.keys())
-    for method in methods:
+    plotted = []
+    for idx, method in enumerate(methods):
         aucs = np.array(auc_scores[method])
         lowers = np.array([ci[0] for ci in auc_cis[method]])
         uppers = np.array([ci[1] for ci in auc_cis[method]])
         yerr = np.vstack([aucs - lowers, uppers - aucs])
-        plt.errorbar(percentages, aucs, yerr=yerr, label=method, marker='o', capsize=4)
+
+        # Add jitter if this line is identical to a previous one
+        for prev in plotted:
+            if np.allclose(aucs, prev, atol=1e-8):
+                aucs = aucs + (idx+1) * 0.002  # small vertical offset
+        plotted.append(aucs.copy())
+
+        plt.errorbar(percentages, aucs, yerr=yerr, label=method, marker='o', capsize=4, alpha=0.9, linestyle='-', zorder=10-idx)
     plt.xlabel('Percentage of Core Nodes Used for Training')
     plt.xticks(percentages)
     plt.ylabel('AUC')

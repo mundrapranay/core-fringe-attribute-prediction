@@ -3,6 +3,23 @@ import itertools
 from methods import *
 from data_preprocessing import *
 from plotter import *
+import os
+import pandas as pd
+import concurrent.futures
+
+
+def run_with_timeout(func, timeout, *args, **kwargs):
+    """
+    Runs func(*args, **kwargs) with a timeout (in seconds).
+    Returns the result if completed in time, else returns None.
+    """
+    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func, *args, **kwargs)
+        try:
+            return future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            print(f"Function {func.__name__} timed out after {timeout} seconds.")
+            return None
 
 
 def finetuneLR():
@@ -157,14 +174,14 @@ def iid_pipeline():
 
 
 
-def sbm_pipeline(n_runs=2):
+def sbm_pipeline(n_runs=1):
     file_ext = '.mat'
     percentages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     seeds = [123, 345, 678, 910, 112]
     n_steps = len(percentages)
-    auc_scores = { 'cc': [], 'cf': [], 'cfed_true': [], 'random': []}
-    auc_cis = { 'cc': [], 'cf': [], 'cfed_true': [],  'random' : []}
-    acc_scores = { 'cc': [], 'cf': [], 'cfed_true': [],  'random' : [] }
+    auc_scores = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : [], 'iterative_benson_cn' : [], 'iterative_benson_jk' : [], 'iterative_cosine' : [], 'iterative_eigenValue2' : [], 'iterative_eigenValue3' : [], 'iterative_nonZeroEigen' : []}
+    auc_cis = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : [], 'iterative_benson_cn' : [], 'iterative_benson_jk' : [], 'iterative_cosine' : [], 'iterative_eigenValue2' : [], 'iterative_eigenValue3' : [], 'iterative_nonZeroEigen' : []}
+    acc_scores = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : [], 'iterative_benson_cn' : [], 'iterative_benson_jk' : [], 'iterative_cosine' : [], 'iterative_eigenValue2' : [], 'iterative_eigenValue3' : [], 'iterative_nonZeroEigen' : []}
     for run in range(n_runs):
         print(f"SBM pipeline run {run+1}/{n_runs}")
         for f in listdir(fb_code_path):
@@ -173,31 +190,161 @@ def sbm_pipeline(n_runs=2):
                 # seed = seeds[run]
                 from datetime import datetime
                 seed = random.seed(datetime.now().timestamp())
-                sbm_adj_matrix, metadata = sbm_gender_homophily_adj_and_metadata(500, 500, 0.15, 0.1, seed=seed)
-                adj_matrix, core_indices, fringe_indices, ff_true = create_iid_core_fringe_graph(sbm_adj_matrix, 300, seed=seed, ff=True)
+                # sbm_adj_matrix, metadata = sbm_gender_homophily_adj_and_metadata(500, 500, 0.15, 0.1, seed=seed)
+                # adj_matrix, core_indices, fringe_indices, ff_true = create_iid_core_fringe_graph(sbm_adj_matrix, 300, seed=seed, ff=True)
+                adj_matrix, metadata = parse_fb100_mat_file(path_join(fb_code_path, f))
+                chosen_dorms_list = [[np.uint(31), np.uint(32)]]
+                adj_matrix, core_indices, fringe_indices = create_multi_dorm_core_fringe_graph(adj_matrix, metadata, chosen_dorms_list)
                 # adj_matrix, core_indices, fringe_indices, metadata = sbm_manual_core_fringe(1000, 400, 0.15, 0.1, seed=seed)
                 lr_kwargs = {'C': 100, 'solver': 'liblinear', 'max_iter': 1000}
                 for idx, p in enumerate(percentages):
                     labelled_core_indices = np.random.choice(core_indices, size=int(p * len(core_indices)), replace=False)
-                    _, acc_core_only, auc_core_only, ci_cc = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=True, lr_kwargs=lr_kwargs, return_auc_ci=True)
-                    _, acc_core_fringe, auc_core_fringe, ci_cf = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, return_auc_ci=True)
-                    _, acc_cfed, auc_cfed, ci_cfed = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=False, ff=True, ff_value=ff_true, p_core_fringe=0.15, p_fringe_fringe=0.0, return_auc_ci=True)
+                    # _, acc_core_only, auc_core_only, ci_cc = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=True, lr_kwargs=lr_kwargs, return_auc_ci=True)
+                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, return_auc_ci=True)
+                    if result is not None:
+                        _, acc_core_fringe, auc_core_fringe, ci_cf = result
+                    else:
+                        acc_core_fringe = auc_core_fringe = ci_cf = None
+
+                    # _, acc_cfed, auc_cfed, ci_cfed = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, sbm=True, return_auc_ci=True)
+                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, sbm=True, return_auc_ci=True)
+                    if result is not None:
+                        _, acc_benson_cn, auc_benson_cn, ci_benson_cn = result
+                    else:
+                        acc_benson_cn = auc_benson_cn = ci_benson_cn = None
+
+                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, benson=True, benson_method='jk', return_auc_ci=True)
+                    if result is not None:
+                        _, acc_benson_jk, auc_benson_jk, ci_benson_jk = result
+                    else:
+                        acc_benson_jk = auc_benson_jk = ci_benson_jk = None
+
+                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, cosine=True, return_auc_ci=True)
+                    if result is not None:
+                        _, acc_cosine, auc_cosine, ci_cosine = result
+                    else:
+                        acc_cosine = auc_cosine = ci_cosine = None
+
+                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method='eigenValue2', return_auc_ci=True)
+                    if result is not None:
+                        _, acc_eigen2, auc_eigen2, ci_eigen2 = result
+                    else:
+                        acc_eigen2 = auc_eigen2 = ci_eigen2 = None
+
+                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method='eigenValue3', return_auc_ci=True)
+                    if result is not None:
+                        _, acc_eigen3, auc_eigen3, ci_eigen3 = result
+                    else:
+                        acc_eigen3 = auc_eigen3 = ci_eigen3 = None
+
+                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method='nonZeroEigen', return_auc_ci=True)
+                    if result is not None:
+                        _, acc_nzeigen, auc_nzeigen, ci_nzeigen = result
+                    else:
+                        acc_nzeigen = auc_nzeigen = ci_nzeigen = None
+
                     # _, acc_cfed_naive, auc_cfed_naive, ci_cfed_naive = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, iid_core=True, p_core_fringe=0.15, p_fringe_fringe=0.0, naive_degree=True, return_auc_ci=True)
-                    
-                    auc_random, ci_random = random_guesser(fringe_indices, metadata, seed=seed)
-                    auc_scores['cc'].append(auc_core_only)
+                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata)
+                    if result is not None:
+                        acc_iterative, auc_iterative, ci_iterative = result
+                    else:
+                        acc_iterative = auc_iterative = ci_iterative = None
+
+
+
+                    # iterative with different jumpstart predictions 
+                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, benson='cn')
+                    if result is not None:
+                        acc_iterative_benson_cn, auc_iterative_benson_cn, ci_iterative_benson_cn = result
+                    else:
+                        acc_iterative_benson_cn = auc_iterative_benson_cn = ci_iterative_benson_cn = None
+
+                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, benson='jk')
+                    if result is not None:
+                        acc_iterative_benson_jk, auc_iterative_benson_jk, ci_iterative_benson_jk = result
+                    else:
+                        acc_iterative_benson_jk = auc_iterative_benson_jk = ci_iterative_benson_jk = None
+
+                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, cosine=True)
+                    if result is not None:
+                        acc_iterative_cosine, auc_iterative_cosine, ci_iterative_cosine = result
+                    else:
+                        acc_iterative_cosine = auc_iterative_cosine = ci_iterative_cosine = None
+
+                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, new_method='eigenValue2')
+                    if result is not None:
+                        acc_iterative_eigenValue2, auc_iterative_eigenValue2, ci_iterative_eigenValue2 = result
+                    else:
+                        acc_iterative_eigenValue2 = auc_iterative_eigenValue2 = ci_iterative_eigenValue2 = None
+
+                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, new_method='eigenValue3')
+                    if result is not None:
+                        acc_iterative_eigenValue3, auc_iterative_eigenValue3, ci_iterative_eigenValue3 = result
+                    else:
+                        acc_iterative_eigenValue3 = auc_iterative_eigenValue3 = ci_iterative_eigenValue3 = None
+
+                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, new_method='nonZeroEigen')
+                    if result is not None:
+                        acc_iterative_nonZeroEigen, auc_iterative_nonZeroEigen, ci_iterative_nonZeroEigen = result
+                    else:
+                        acc_iterative_nonZeroEigen = auc_iterative_nonZeroEigen = ci_iterative_nonZeroEigen = None
+
+
+
+                    # auc_random, ci_random = random_guesser(fringe_indices, metadata, seed=seed)
+                    # auc_scores['cc'].append(auc_core_only)
                     auc_scores['cf'].append(auc_core_fringe)
-                    auc_scores['cfed_true'].append(auc_cfed)
+                    # auc_scores['cfed'].append(auc_cfed)
+                    auc_scores['iterative'].append(auc_iterative)
+                    auc_scores['benson_cn'].append(auc_benson_cn)
+                    auc_scores['benson_jk'].append(auc_benson_jk)
+                    auc_scores['cosine'].append(auc_cosine)
+                    auc_scores['eigenValue2'].append(auc_eigen2)
+                    auc_scores['eigenValue3'].append(auc_eigen3)
+                    auc_scores['nonZeroEigen'].append(auc_nzeigen)
+                    auc_scores['iterative_benson_cn'].append(auc_iterative_benson_cn)
+                    auc_scores['iterative_benson_jk'].append(auc_iterative_benson_jk)
+                    auc_scores['iterative_cosine'].append(auc_iterative_cosine)
+                    auc_scores['iterative_eigenValue2'].append(auc_iterative_eigenValue2)
+                    auc_scores['iterative_eigenValue3'].append(auc_iterative_eigenValue3)
+                    auc_scores['iterative_nonZeroEigen'].append(auc_iterative_nonZeroEigen)
                     # auc_scores['cfed_naive'].append(auc_cfed_naive)
-                    auc_scores['random'].append(auc_random)
-                    auc_cis['cc'].append(ci_cc)
+                    # auc_scores['random'].append(auc_random)
+                    # auc_cis['cc'].append(ci_cc)
                     auc_cis['cf'].append(ci_cf)
-                    auc_cis['cfed_true'].append(ci_cfed)
+                    # auc_cis['cfed'].append(ci_cfed)
+                    auc_cis['iterative'].append(ci_iterative)
+                    auc_cis['benson_cn'].append(ci_benson_cn)
+                    auc_cis['benson_jk'].append(ci_benson_jk)
+                    auc_cis['cosine'].append(ci_cosine)
+                    auc_cis['eigenValue2'].append(ci_eigen2)
+                    auc_cis['eigenValue3'].append(ci_eigen3)
+                    auc_cis['nonZeroEigen'].append(ci_nzeigen)
+
+                    auc_cis['iterative_benson_cn'].append(ci_iterative_benson_cn)
+                    auc_cis['iterative_benson_jk'].append(ci_iterative_benson_jk)
+                    auc_cis['iterative_cosine'].append(ci_iterative_cosine)
+                    auc_cis['iterative_eigenValue2'].append(ci_iterative_eigenValue2)
+                    auc_cis['iterative_eigenValue3'].append(ci_iterative_eigenValue3)
+                    auc_cis['iterative_nonZeroEigen'].append(ci_iterative_nonZeroEigen)
                     # auc_cis['cfed_naive'].append(ci_cfed_naive)
-                    auc_cis['random'].append(ci_random)
-                    acc_scores['cc'].append(acc_core_only)
+                    # auc_cis['random'].append(ci_random)
+                    # acc_scores['cc'].append(acc_core_only)
                     acc_scores['cf'].append(acc_core_fringe)
-                    acc_scores['cfed_true'].append(acc_cfed)
+                    # acc_scores['cfed'].append(acc_cfed)
+                    acc_scores['iterative'].append(acc_iterative)   
+                    acc_scores['benson_cn'].append(acc_benson_cn)
+                    acc_scores['benson_jk'].append(acc_benson_jk)
+                    acc_scores['cosine'].append(acc_cosine)
+                    acc_scores['eigenValue2'].append(acc_eigen2)
+                    acc_scores['eigenValue3'].append(acc_eigen3)
+                    acc_scores['nonZeroEigen'].append(acc_nzeigen)
+                    acc_scores['iterative_benson_cn'].append(acc_iterative_benson_cn)
+                    acc_scores['iterative_benson_jk'].append(acc_iterative_benson_jk)
+                    acc_scores['iterative_cosine'].append(acc_iterative_cosine)
+                    acc_scores['iterative_eigenValue2'].append(acc_iterative_eigenValue2)
+                    acc_scores['iterative_eigenValue3'].append(acc_iterative_eigenValue3)
+                    acc_scores['iterative_nonZeroEigen'].append(acc_iterative_nonZeroEigen)
                     # acc_scores['cfed_naive'].append(acc_cfed_naive)
     # Convert lists to arrays for easier reshaping
     for key in auc_scores:
@@ -222,9 +369,41 @@ def sbm_pipeline(n_runs=2):
     for key in acc_scores:
         if key != 'random':  # Skip random as it's not used in accuracy plots
             acc_scores[key] = np.array(acc_scores[key]).reshape(n_runs, len(percentages)).mean(axis=0)
+    tag = f"YaleIID_pipeline_increased_avg{n_runs}_0.15_0.1_gender_iterative_linkLR_symmetric_binary_benson_new_methods_v2"
+    plot_auc_with_ci(auc_scores_plot, auc_cis_plot, percentages, tag)
+    
+    # plot_acc(acc_scores, percentages, f"SBM_gender_0.15_0.1_v5")
 
-    plot_auc_with_ci(auc_scores_plot, auc_cis_plot, percentages, f"SBM_pipeline_increased_avg{n_runs}_0.15_0.1_gender_v5")
-    plot_acc(acc_scores, percentages, f"SBM_gender_0.15_0.1_v5")
+    # --- Save results to CSV ---
+    output_dir = "../results"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Save AUC scores
+    auc_df = pd.DataFrame(auc_scores_plot)
+    auc_df['percentage'] = percentages
+    auc_df.to_csv(os.path.join(output_dir, f"{tag}_auc_scores.csv"), index=False)
+    print(f"AUC scores saved to {os.path.join(output_dir, f'{tag}_auc_scores.csv')}")
+
+    # Save Accuracy scores
+    acc_df = pd.DataFrame(acc_scores)
+    acc_df['percentage'] = percentages
+    acc_df.to_csv(os.path.join(output_dir, f"{tag}_acc_scores.csv"), index=False)
+    print(f"Accuracy scores saved to {os.path.join(output_dir, f'{tag}_acc_scores.csv')}")
+
+    # Save AUC CIs
+    # This is more complex, so we'll flatten the data
+    ci_data = []
+    for method, CIs in auc_cis_plot.items():
+        for i, (lower, upper) in enumerate(CIs):
+            ci_data.append({
+                'percentage': percentages[i],
+                'method': method,
+                'ci_lower': lower,
+                'ci_upper': upper
+            })
+    ci_df = pd.DataFrame(ci_data)
+    ci_df.to_csv(os.path.join(output_dir, f"{tag}_auc_cis.csv"), index=False)
+    print(f"AUC CIs saved to {os.path.join(output_dir, f'{tag}_auc_cis.csv')}")
 
 
 
@@ -311,7 +490,7 @@ def fringe_inclusion_pipeline_and_plot(n_core=150, n_fringe=50, p_core_core=0.8,
     plt.close()
 
 
-def sbm_homophily_sweep_pipeline(n_runs=5, n_core=1000, n_fringe=400, p_cc_values=None, p_cf_values=None, p_ff=0.0, tag="SBM_homophily_sweep_gender_homophily_wo_random"):
+def sbm_homophily_sweep_pipeline(n_runs=5, n_core=1000, n_fringe=400, p_cc_values=None, p_cf_values=None, p_ff=0.0, tag="SBM_homophily_sweep_gender_homophily_wo_random_v2"):
     """
     For each value of P_CC and P_CF (with P_CC/P_CF > 1), generate a SBM core-fringe graph.
     Always use 100% of the core as labelled for training.
@@ -330,7 +509,7 @@ def sbm_homophily_sweep_pipeline(n_runs=5, n_core=1000, n_fringe=400, p_cc_value
     acc_dict = {k: [] for k in method_keys if k != 'random'}
     tuple_list = []
     p_cf = 0.15
-    ratios = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0]
+    ratios = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0]
     # for i, p_cc in enumerate(p_cc_values):
     for j, r in enumerate(ratios):
         # if p_cc / p_cf <= 1:
@@ -575,9 +754,19 @@ def test_fringe_prediction_accuracy():
 
 
 
+
+def iterative_pipeline():
+    from datetime import datetime
+    seed = random.seed(datetime.now().timestamp())
+    # adj_matrix, core_indices, fringe_indices, metadata = sbm_manual_core_fringe(n_core, n_fringe, p_cc, p_cf, seed=seed)
+    sbm_adj_matrix, metadata = sbm_gender_homophily_adj_and_metadata(500, 500, 0.15, 0.1, seed=seed)
+    adj_matrix, core_indices, fringe_indices = create_iid_core_fringe_graph(sbm_adj_matrix, 300, seed=seed)
+    iterative_fringe_label_inference(adj_matrix, core_indices, fringe_indices, T_max=10, metadata=metadata)
+
 if __name__ == '__main__':
-    # sbm_pipeline()
+    sbm_pipeline()
     # test_fringe_prediction_accuracy()
     # hyperparameter_search_node2vec()
     # sbm_homophily_sweep_pipeline()
-    fringe_inclusion_pipeline_and_plot()
+    # fringe_inclusion_pipeline_and_plot()
+    # iterative_pipeline()

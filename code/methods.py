@@ -64,7 +64,9 @@ def iid_sbm_expected_degree(adj_matrix, core_indices, fringe_indices, n1, n2, p_
 def naive_estimated_degree(adj_matrix, core_indices, fringe_indices):
     return [np.array(adj_matrix[core_indices, :].sum(axis=1)).flatten().mean()] * len(fringe_indices)
 
-def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=None, expected_degree=False, iid_core=False, naive_degree=False, sbm=False, ff=False, ff_value=None, p_core_fringe=0.0, p_fringe_fringe=0.0, return_auc_ci=False, plot_auc_ci=False):
+def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, 
+                                      core_only=False, lr_kwargs=None, expected_degree=False, iid_core=False, naive_degree=False, sbm=False, ff=False, ff_value=None, 
+                                      return_auc_ci=False, plot_auc_ci=False, return_probs=False, benson=False, benson_method='cn', cosine=False, new_method=None):
     # Get gender and dorm information
     gender = metadata[:, 1].astype(int)  # Convert to integer
     dorm = metadata[:, 4]
@@ -149,6 +151,17 @@ def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, 
         #         chosen_cols = np.random.choice(fringe_indices, size=min(k, len(fringe_indices)), replace=False)
         #         X_test[i, chosen_cols] = 1
     
+    if benson:
+        adj_matrix_imputed = fill_fringe_fringe_block_benson(adj_matrix, fringe_indices, method=benson_method)
+        X_test = adj_matrix_imputed[fringe_indices, :]
+    
+    if cosine:
+        adj_matrix_imputed = fill_fringe_fringe_block_class_cosine(adj_matrix, fringe_indices, core_indices, gender)
+        X_test = adj_matrix_imputed[fringe_indices, :]
+    
+    if new_method:
+        adj_matrix_imputed = logistic_regression_link_prediction(adj_matrix, core_indices, fringe_indices, new_method)
+        X_test = adj_matrix_imputed[fringe_indices, :]
     y_test_pred = model.predict(X_test)
     y_test_scores = model.predict_proba(X_test)
     
@@ -183,8 +196,11 @@ def link_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, 
     
     if return_auc_ci:
         return beta, accuracy, auc, (auc_lower, auc_upper)
+    elif return_probs:
+        return beta, accuracy, auc, y_test_scores
     else:
         return beta, accuracy, auc
+
 
 def random_guesser(fringe_indices, metadata, seed):
     """
@@ -419,7 +435,7 @@ def node2vec_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indic
     print(f"X_test sparsity: {1 - X_fringe.nnz / (X_fringe.shape[0] * X_fringe.shape[1]):.4f}")
     print(f"Model classes: {model.classes_}")
     print(f"Prediction distribution: {np.bincount(y_test_pred)}")
-    return beta, accuracy, auc
+    return beta, accuracy, auc, y_test_scores
 
 def estimate_expected_degree_sbm(core_indices, fringe_indices, p_core_fringe, p_fringe_fringe=0.0):
     """
@@ -454,3 +470,344 @@ def auc_confidence_interval(y_true, y_scores, n_bootstraps=1000, random_seed=42)
     lower = sorted_scores[int(0.025 * len(sorted_scores))]
     upper = sorted_scores[int(0.975 * len(sorted_scores))]
     return lower, upper
+
+
+
+def estimate_p_in_p_out(A, node_indices, labels):
+    """
+    Estimate p_in and p_out from the adjacency matrix and node labels.
+    node_indices: indices of nodes to consider (core+fringe)
+    labels: class labels for those nodes (predicted for fringe, true for core)
+    """
+    from itertools import combinations
+    A_sub = A[node_indices, :][:, node_indices]
+    n = len(node_indices)
+    pairs = list(combinations(range(n), 2))
+    same_class_edges = 0
+    same_class_total = 0
+    diff_class_edges = 0
+    diff_class_total = 0
+    for i, j in pairs:
+        if labels[i] == labels[j]:
+            same_class_total += 1
+            if A_sub[i, j] != 0:
+                same_class_edges += 1
+        else:
+            diff_class_total += 1
+            if A_sub[i, j] != 0:
+                diff_class_edges += 1
+    p_in = same_class_edges / same_class_total if same_class_total > 0 else 0
+    p_out = diff_class_edges / diff_class_total if diff_class_total > 0 else 0
+    return p_in, p_out
+
+
+def iterative_fringe_label_inference(
+    A,                # observed adjacency (scipy sparse, blocks CC, CF)
+    core_indices,     # indices of core nodes
+    fringe_indices,   # indices of fringe nodes
+    T_max=10,         # max iterations
+    tol=1e-3,         # convergence tolerance
+    metadata=None,    # full node labels (for evaluation, not used in inference)
+    verbose=True,
+    new_method=None,
+    benson=None,
+    cosine=None
+):
+    """
+    Iterative algorithm for fringe label inference using soft FF-matrix and Sinkhorn normalization.
+    At each iteration, p_in and p_out are estimated using current core+fringe labels.
+    """
+    import numpy as np
+
+    n_core = len(core_indices)
+    n_fringe = len(fringe_indices)
+    n = n_core + n_fringe
+    y_C = metadata[:, 1][core_indices]
+    lr_kwargs = {'C': 100, 'solver': 'liblinear', 'max_iter': 1000}
+    # Initial: use only core labels to estimate p_in, p_out
+    p_in, p_out = estimate_p_in_p_out(A, core_indices, y_C)
+    if verbose:
+        print(f"Initial p_in: {p_in:.4f}, p_out: {p_out:.4f}")
+
+    # 1. Initial CFED LINK-LR on observed (CC+CF) to get P^(0)(y_F)
+    if new_method:
+        _, _, _, P_yF = link_logistic_regression_pipeline(
+            A, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method=new_method, return_probs=True
+        )
+    elif benson:
+        _, _, _, P_yF = link_logistic_regression_pipeline(
+            A, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, benson=True, benson_method=benson, return_probs=True
+        )
+    elif cosine:
+        _, _, _, P_yF = link_logistic_regression_pipeline(
+            A, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, cosine=True, return_probs=True
+        )
+    else:
+        _, _, _, P_yF = link_logistic_regression_pipeline(
+            A, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=False, return_probs=True
+        )
+
+    P_yF_prev = P_yF.copy()
+    for t in range(T_max):
+        if verbose:
+            print(f"Iteration {t+1}")
+
+        # 1. Estimate FF-degree marginals r_u for each fringe u
+        # r_u = []
+        # for i, u in enumerate(fringe_indices):
+        #     prob_u = P_yF[i, 1] if P_yF.shape[1] == 2 else P_yF[i].max()
+        #     expected_ff_deg = 0
+        #     for j, v in enumerate(fringe_indices):
+        #         if u == v:
+        #             continue
+        #         prob_v = P_yF[j, 1] if P_yF.shape[1] == 2 else P_yF[j].max()
+        #         same = prob_u * prob_v + (1 - prob_u) * (1 - prob_v)
+        #         diff = 1 - same
+        #         expected_ff_deg += same * p_in + diff * p_out
+        #     deg_to_core = A[u, core_indices].sum()
+        #     r_u.append(deg_to_core + expected_ff_deg)
+        # r_u = np.array(r_u)
+
+        # 2. BUILD soft FF-matrix W
+        W = np.zeros((n_fringe, n_fringe))
+        for i in range(n_fringe):
+            for j in range(i+1, n_fringe):
+                prob_u = P_yF[i, 1] if P_yF.shape[1] == 2 else P_yF[i].max()
+                prob_v = P_yF[j, 1] if P_yF.shape[1] == 2 else P_yF[j].max()
+                same = prob_u * prob_v + (1 - prob_u) * (1 - prob_v)
+                diff = 1 - same
+                W[i, j] = same * p_in + diff * p_out
+                W[j, i] = W[i, j]  # Symmetric
+        np.fill_diagonal(W, 0)
+        
+        r_u = W.sum(axis=1)
+
+        # 3. SINKHORN-NORMALIZE W to match degree marginals {r_u}
+        P_FF_soft = sinkhorn_normalize(W, r_u)
+        deg_seq = np.round(r_u).astype(int)
+        P_FF = sample_symmetric_binary_matrix_from_soft(P_FF_soft, deg_seq)
+
+        # 4. AUGMENT adjacency: A* = [CC CF; CFᵀ  P_FF]
+        A_star = A.copy().tolil()
+        for i, u in enumerate(fringe_indices):
+            for j, v in enumerate(fringe_indices):
+                if u == v:
+                    continue
+                A_star[u, v] = P_FF[i, j]
+        A_star = A_star.tocsr()
+
+        # 5. RE-TRAIN CFED LINK-LR on A* using labels y_C
+        _, _, _, P_yF = link_logistic_regression_pipeline(
+            A_star, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, return_probs=True
+        )
+
+        # P_yF = transductive_logistic_regression_pipeline(A_star, core_indices, fringe_indices, metadata)
+        # _, _, _, P_yF = node2vec_logistic_regression_pipeline()
+
+        # 6. Check convergence
+        diff = np.linalg.norm(P_yF - P_yF_prev)
+        if verbose:
+            print(f"  ||P_yF - P_yF_prev|| = {diff:.6f}")
+        if diff < tol:
+            break
+        
+        # 7. Estimate p_in, p_out using current labels
+        if P_yF.shape[1] == 2:
+            y_F_pred = (P_yF[:, 1] >= 0.5).astype(int) + 1  # If classes are 1/2
+        else:
+            y_F_pred = np.argmax(P_yF, axis=1)
+        # Combine core and fringe labels for p_in/p_out estimation
+        all_indices = np.concatenate([core_indices, fringe_indices])
+        all_labels = np.concatenate([y_C, y_F_pred])
+        p_in, p_out = estimate_p_in_p_out(A_star, all_indices, all_labels)
+        if verbose:
+            print(f"  Updated p_in: {p_in:.4f}, p_out: {p_out:.4f}")
+        P_yF_prev = P_yF.copy()
+
+    # After convergence, evaluate final predictions if ground truth is available
+    from sklearn.metrics import accuracy_score, roc_auc_score
+    y_true = metadata[fringe_indices, 1].astype(int)
+    y_pred_prob = P_yF[:, 1] if P_yF.shape[1] == 2 else P_yF.max(axis=1)
+    if P_yF.shape[1] == 2:
+        y_pred = (y_pred_prob >= 0.5).astype(int) + 1
+    else:
+        y_pred = np.argmax(P_yF, axis=1)
+    acc = accuracy_score(y_true, y_pred)
+    auc = roc_auc_score(y_true, y_pred_prob)
+    
+    auc_lower, auc_upper = auc_confidence_interval(y_true, y_pred_prob)
+    return acc, auc, (auc_lower, auc_upper)
+    # return P_yF
+
+
+def sinkhorn_normalize(W, target_degrees, max_iter=1000, tol=1e-6, verbose=False):
+    """
+    Sinkhorn-Knopp normalization to make W symmetric with row/col sums matching target_degrees.
+    Args:
+        W: (n, n) non-negative symmetric numpy array (soft adjacency, e.g. from label marginals)
+        target_degrees: (n,) numpy array, desired row/col sums (degree marginals)
+    Returns:
+        W_norm: (n, n) numpy array, normalized so that row/col sums ≈ target_degrees, symmetric, zero diagonal
+    """
+    n = W.shape[0]
+    W = W + 1e-12
+    np.fill_diagonal(W, 0)
+    r = np.ones(n)
+    c = np.ones(n)
+    for it in range(max_iter):
+        W_no_diag = W.copy()
+        np.fill_diagonal(W_no_diag, 0)
+        row_sums = W_no_diag.dot(c)
+        r = target_degrees / (row_sums + 1e-12)
+        W_no_diag = W.copy()
+        np.fill_diagonal(W_no_diag, 0)
+        col_sums = W_no_diag.T.dot(r)
+        c = target_degrees / (col_sums + 1e-12)
+        W_norm = r[:, None] * W * c[None, :]
+        np.fill_diagonal(W_norm, 0)
+        # Symmetrize after each iteration
+        W_norm = (W_norm + W_norm.T) / 2
+        row_err = np.abs(W_norm.sum(axis=1) - target_degrees).max()
+        col_err = np.abs(W_norm.sum(axis=0) - target_degrees).max()
+        if verbose and it % 10 == 0:
+            print(f"Sinkhorn iter {it}: row_err={row_err:.4e}, col_err={col_err:.4e}")
+        if row_err < tol and col_err < tol:
+            break
+    else:
+        if verbose:
+            print("Sinkhorn did not fully converge.")
+    W_norm = (W_norm + W_norm.T) / 2
+    np.fill_diagonal(W_norm, 0)
+    assert np.allclose(W_norm, W_norm.T, atol=1e-8), "W_norm is not symmetric!"
+    assert np.allclose(np.diag(W_norm), 0, atol=1e-8), "Diagonal entries of W_norm are not zero!"
+
+    return W_norm
+
+
+def sample_symmetric_binary_matrix_from_soft(W_norm, target_degrees):
+    """
+    Given a symmetric soft matrix W_norm (zero diagonal) and integer degree sequence,
+    produce a symmetric 0/1 matrix with the given degree sequence.
+    Havel-Hakimi algorithm
+    """
+    n = W_norm.shape[0]
+    # Round target degrees to nearest integer
+    deg_seq = np.round(target_degrees).astype(int)
+    # Ensure sum of degrees is even
+    if deg_seq.sum() % 2 != 0:
+        # Adjust the largest degree down by 1
+        deg_seq[np.argmax(deg_seq)] -= 1
+
+    # Use the soft matrix as probabilities to sample edges
+    # Get upper triangle indices
+    triu_idx = np.triu_indices(n, k=1)
+    edge_probs = W_norm[triu_idx]
+    # Sort edges by probability (descending)
+    sorted_idx = np.argsort(-edge_probs)
+    # Build edge list greedily
+    A_bin = np.zeros((n, n), dtype=int)
+    deg = np.zeros(n, dtype=int)
+    for idx in sorted_idx:
+        i = triu_idx[0][idx]
+        j = triu_idx[1][idx]
+        if deg[i] < deg_seq[i] and deg[j] < deg_seq[j]:
+            A_bin[i, j] = 1
+            A_bin[j, i] = 1
+            deg[i] += 1
+            deg[j] += 1
+    # Check if degree sequence is matched
+    if not np.all(deg == deg_seq):
+        print("Warning: Could not exactly match degree sequence.")
+    np.fill_diagonal(A_bin, 0)
+    return A_bin
+
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.metrics import accuracy_score, roc_auc_score
+
+class TransductiveLogisticRegression(nn.Module):
+    def __init__(self, n_features, n_classes=2):
+        super().__init__()
+        self.linear = nn.Linear(n_features, n_classes if n_classes > 2 else 1)
+
+    def forward(self, x):
+        return self.linear(x)
+
+def transductive_logistic_regression_pipeline(adj_matrix, core_indices, fringe_indices, metadata, lr=0.1, n_epochs=1000, verbose=True):
+    """
+    Transductive LR: Train on all nodes, but only use core labels for loss.
+    Uses the full adjacency matrix (including FF block) as features.
+    Returns predicted probabilities for fringe nodes.
+    """
+    # Prepare data
+    X = adj_matrix.toarray() if hasattr(adj_matrix, 'toarray') else np.array(adj_matrix)
+    gender = metadata[:, 1].astype(int)
+    y = gender
+
+    n_nodes = X.shape[0]
+    n_classes = len(np.unique(y[core_indices]))
+    y_core = y[core_indices]
+    y_all = np.full(n_nodes, -1)
+    y_all[core_indices] = y_core
+
+    # Torch tensors
+    X_tensor = torch.tensor(X, dtype=torch.float32)
+    if n_classes == 2:
+        y_tensor = torch.tensor(y_all == 2, dtype=torch.float32)  # Binary: 0/1
+    else:
+        y_tensor = torch.tensor(y_all, dtype=torch.long)
+
+    # Model
+    model = TransductiveLogisticRegression(n_features=X.shape[1], n_classes=n_classes)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    if n_classes == 2:
+        criterion = nn.BCEWithLogitsLoss(reduction='none')
+    else:
+        criterion = nn.CrossEntropyLoss(reduction='none')
+
+    for epoch in range(n_epochs):
+        model.train()
+        logits = model(X_tensor)
+        if n_classes == 2:
+            logits = logits.squeeze(-1)
+            loss_vec = criterion(logits, y_tensor)
+        else:
+            loss_vec = criterion(logits, y_tensor)
+        # Only use loss for core nodes
+        mask = torch.zeros(n_nodes, dtype=torch.bool)
+        mask[core_indices] = True
+        loss = loss_vec[mask].mean()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        if verbose and (epoch % 100 == 0 or epoch == n_epochs - 1):
+            print(f"Epoch {epoch}: loss={loss.item():.4f}")
+
+    # Inference: get probabilities for fringe nodes
+    model.eval()
+    with torch.no_grad():
+        logits = model(X_tensor)
+        if n_classes == 2:
+            probs = torch.sigmoid(logits).squeeze(-1).cpu().numpy()
+            fringe_probs = np.vstack([1 - probs[fringe_indices], probs[fringe_indices]]).T
+        else:
+            probs = torch.softmax(logits, dim=1).cpu().numpy()
+            fringe_probs = probs[fringe_indices]
+
+    # Optionally, evaluate
+    y_true = y[fringe_indices]
+    y_pred_prob = fringe_probs[:, 1] if n_classes == 2 else fringe_probs.max(axis=1)
+    y_pred = (y_pred_prob >= 0.5).astype(int) + 1 if n_classes == 2 else np.argmax(fringe_probs, axis=1)
+    acc = accuracy_score(y_true, y_pred)
+    try:
+        auc = roc_auc_score(y_true, y_pred_prob)
+    except Exception:
+        auc = None
+    print(f"Fringe Accuracy: {acc:.4f}")
+    if auc is not None:
+        print(f"Fringe ROC AUC: {auc:.4f}")
+
+    return fringe_probs
