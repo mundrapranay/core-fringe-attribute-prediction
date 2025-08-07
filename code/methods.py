@@ -473,11 +473,12 @@ def auc_confidence_interval(y_true, y_scores, n_bootstraps=1000, random_seed=42)
 
 
 
-def estimate_p_in_p_out(A, node_indices, labels):
+def estimate_p_in_p_out(A, node_indices, labels, original_p_in=None, original_p_out=None, verbose=False):
     """
     Estimate p_in and p_out from the adjacency matrix and node labels.
     node_indices: indices of nodes to consider (core+fringe)
     labels: class labels for those nodes (predicted for fringe, true for core)
+    original_p_in, original_p_out: optional original SBM parameters for comparison
     """
     from itertools import combinations
     A_sub = A[node_indices, :][:, node_indices]
@@ -498,6 +499,18 @@ def estimate_p_in_p_out(A, node_indices, labels):
                 diff_class_edges += 1
     p_in = same_class_edges / same_class_total if same_class_total > 0 else 0
     p_out = diff_class_edges / diff_class_total if diff_class_total > 0 else 0
+    
+    # Check if the p_in and p_out are close to the original SBM parameters
+    if original_p_in is not None and original_p_out is not None:
+        p_in_error = abs(p_in - original_p_in)
+        p_out_error = abs(p_out - original_p_out)
+        if verbose:
+            print(f"Estimated p_in: {p_in:.4f}, Original p_in: {original_p_in:.4f}, Error: {p_in_error:.4f}")
+            print(f"Estimated p_out: {p_out:.4f}, Original p_out: {original_p_out:.4f}, Error: {p_out_error:.4f}")
+        
+        # Return both estimated and original parameters for comparison
+        return p_in, p_out, p_in_error, p_out_error
+    
     return p_in, p_out
 
 
@@ -511,7 +524,9 @@ def iterative_fringe_label_inference(
     verbose=True,
     new_method=None,
     benson=None,
-    cosine=None
+    cosine=None,
+    original_p_in=None,  # original SBM p_in for verification
+    original_p_out=None  # original SBM p_out for verification
 ):
     """
     Iterative algorithm for fringe label inference using soft FF-matrix and Sinkhorn normalization.
@@ -524,10 +539,17 @@ def iterative_fringe_label_inference(
     n = n_core + n_fringe
     y_C = metadata[:, 1][core_indices]
     lr_kwargs = {'C': 100, 'solver': 'liblinear', 'max_iter': 1000}
+    
     # Initial: use only core labels to estimate p_in, p_out
-    p_in, p_out = estimate_p_in_p_out(A, core_indices, y_C)
-    if verbose:
-        print(f"Initial p_in: {p_in:.4f}, p_out: {p_out:.4f}")
+    if original_p_in is not None and original_p_out is not None:
+        p_in, p_out, p_in_error, p_out_error = estimate_p_in_p_out(A, core_indices, y_C, original_p_in, original_p_out, verbose)
+        if verbose:
+            print(f"Initial p_in: {p_in:.4f}, p_out: {p_out:.4f}")
+            print(f"Parameter estimation errors - p_in: {p_in_error:.4f}, p_out: {p_out_error:.4f}")
+    else:
+        p_in, p_out = estimate_p_in_p_out(A, core_indices, y_C)
+        if verbose:
+            print(f"Initial p_in: {p_in:.4f}, p_out: {p_out:.4f}")
 
     # 1. Initial CFED LINK-LR on observed (CC+CF) to get P^(0)(y_F)
     if new_method:
@@ -601,45 +623,49 @@ def iterative_fringe_label_inference(
             A_star, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, return_probs=True
         )
 
-        # P_yF = transductive_logistic_regression_pipeline(A_star, core_indices, fringe_indices, metadata)
-        # _, _, _, P_yF = node2vec_logistic_regression_pipeline()
-
-        # 6. Check convergence
-        diff = np.linalg.norm(P_yF - P_yF_prev)
-        if verbose:
-            print(f"  ||P_yF - P_yF_prev|| = {diff:.6f}")
-        if diff < tol:
-            break
-        
-        # 7. Estimate p_in, p_out using current labels
-        if P_yF.shape[1] == 2:
-            y_F_pred = (P_yF[:, 1] >= 0.5).astype(int) + 1  # If classes are 1/2
-        else:
-            y_F_pred = np.argmax(P_yF, axis=1)
-        # Combine core and fringe labels for p_in/p_out estimation
+        # 6. RE-ESTIMATE p_in, p_out using current predictions
         all_indices = np.concatenate([core_indices, fringe_indices])
-        all_labels = np.concatenate([y_C, y_F_pred])
-        p_in, p_out = estimate_p_in_p_out(A_star, all_indices, all_labels)
-        if verbose:
-            print(f"  Updated p_in: {p_in:.4f}, p_out: {p_out:.4f}")
+        all_labels = np.concatenate([y_C, np.argmax(P_yF, axis=1) + 1])  # Convert to 1,2 labels
+        
+        if original_p_in is not None and original_p_out is not None:
+            p_in, p_out, p_in_error, p_out_error = estimate_p_in_p_out(A_star, all_indices, all_labels, original_p_in, original_p_out, verbose)
+            if verbose:
+                print(f"  Updated p_in: {p_in:.4f}, p_out: {p_out:.4f}")
+                print(f"  Parameter errors - p_in: {p_in_error:.4f}, p_out: {p_out_error:.4f}")
+        else:
+            p_in, p_out = estimate_p_in_p_out(A_star, all_indices, all_labels)
+            if verbose:
+                print(f"  Updated p_in: {p_in:.4f}, p_out: {p_out:.4f}")
+
+        # 7. CHECK convergence
+        if np.max(np.abs(P_yF - P_yF_prev)) < tol:
+            if verbose:
+                print(f"Converged at iteration {t+1}")
+            break
         P_yF_prev = P_yF.copy()
 
-    # After convergence, evaluate final predictions if ground truth is available
-    from sklearn.metrics import accuracy_score, roc_auc_score
-    y_true = metadata[fringe_indices, 1].astype(int)
-    y_pred_prob = P_yF[:, 1] if P_yF.shape[1] == 2 else P_yF.max(axis=1)
-    if P_yF.shape[1] == 2:
-        y_pred = (y_pred_prob >= 0.5).astype(int) + 1
-    else:
-        y_pred = np.argmax(P_yF, axis=1)
-    acc = accuracy_score(y_true, y_pred)
-    auc = roc_auc_score(y_true, y_pred_prob)
+    # Final prediction
+    y_F_pred = np.argmax(P_yF, axis=1) + 1  # Convert to 1,2 labels
+    y_F_true = metadata[:, 1][fringe_indices]
     
-    auc_lower, auc_upper = auc_confidence_interval(y_true, y_pred_prob)
-    return acc, auc, (auc_lower, auc_upper)
-    # return P_yF
+    # Calculate accuracy
+    accuracy = np.mean(y_F_pred == y_F_true)
+    
+    # Calculate AUC
+    y_F_scores = P_yF[:, 1] if P_yF.shape[1] == 2 else P_yF.max(axis=1)
+    auc = roc_auc_score(y_F_true, y_F_scores)
+    
+    # Calculate confidence intervals
+    auc_lower, auc_upper = auc_confidence_interval(y_F_true, y_F_scores)
+    
+    if verbose:
+        print(f"Final accuracy: {accuracy:.4f}")
+        print(f"Final AUC: {auc:.4f}")
+        print(f"AUC 95% CI: [{auc_lower:.3f}, {auc_upper:.3f}]")
+    
+    return accuracy, auc, (auc_lower, auc_upper)
 
-
+# test cases for sinkhorn_normalize
 def sinkhorn_normalize(W, target_degrees, max_iter=1000, tol=1e-6, verbose=False):
     """
     Sinkhorn-Knopp normalization to make W symmetric with row/col sums matching target_degrees.

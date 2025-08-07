@@ -1,0 +1,524 @@
+Starting SBM Gender Homophily Parameter Verification Test
+============================================================
+Running SBM gender homophily parameter verification test...
+============================================================
+SBM GENDER HOMOPHILY PARAMETER VERIFICATION PIPELINE
+============================================================
+
+========================================
+Testing configuration: {'n_g1': 300, 'n_g2': 300, 'p_in': 0.15, 'p_out': 0.1, 'seed': 42}
+========================================
+Generated SBM network:
+  - Total nodes: 600
+  - Gender 1 nodes: 300
+  - Gender 2 nodes: 300
+  - Original p_in: 0.1500
+  - Original p_out: 0.1000
+Core-fringe structure:
+  - Core size: 200
+  - Fringe size: 400
+
+--- Test 1: Parameter estimation from core only ---
+Estimated p_in: 0.1517, Original p_in: 0.1500, Error: 0.0017
+Estimated p_out: 0.0996, Original p_out: 0.1000, Error: 0.0004
+
+--- Test 2: Iterative fringe label inference with parameter verification ---
+Estimated p_in: 0.1517, Original p_in: 0.1500, Error: 0.0017
+Estimated p_out: 0.0996, Original p_out: 0.1000, Error: 0.0004
+Initial p_in: 0.1517, p_out: 0.0996
+Parameter estimation errors - p_in: 0.0017, p_out: 0.0004
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 600)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 600
+Mean absolute coefficient: 0.3183
+Max coefficient: 1.1367
+Min coefficient: 0.0001
+Max coefficient (No-Abs): 1.1367
+Min coefficient (No-Abs): -1.1252
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 195, 2: 205}
+Prediction distribution: {1: 210, 2: 190}
+AUC for class 1: 0.9707
+AUC for class 2: 0.9707
+AUC 95% CI: [0.957, 0.983]
+
+Final Results:
+Test Accuracy: 0.8925
+Test ROC AUC: 0.9707
+Training class distribution: {1: 105, 2: 95}
+Test class distribution: {1: 195, 2: 205}
+X_train sparsity: 0.8737
+X_test sparsity: 0.8755
+Iteration 1
+Warning: Could not exactly match degree sequence.
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 600)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 600
+Mean absolute coefficient: 0.3183
+Max coefficient: 1.1367
+Min coefficient: 0.0001
+Max coefficient (No-Abs): 1.1367
+Min coefficient (No-Abs): -1.1252
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 195, 2: 205}
+Prediction distribution: {1: 204, 2: 196}
+AUC for class 1: 0.9650
+AUC for class 2: 0.9650
+AUC 95% CI: [0.950, 0.978]
+
+Final Results:
+Test Accuracy: 0.8925
+Test ROC AUC: 0.9650
+Training class distribution: {1: 105, 2: 95}
+Test class distribution: {1: 195, 2: 205}
+X_train sparsity: 0.8737
+X_test sparsity: 0.8758
+Estimated p_in: 0.1940, Original p_in: 0.1500, Error: 0.0440
+Estimated p_out: 0.0563, Original p_out: 0.1000, Error: 0.0437
+  Updated p_in: 0.1940, p_out: 0.0563
+  Parameter errors - p_in: 0.0440, p_out: 0.0437
+Iteration 2
+Warning: Could not exactly match degree sequence.
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 600)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 600
+Mean absolute coefficient: 0.3183
+Max coefficient: 1.1367
+Min coefficient: 0.0001
+Max coefficient (No-Abs): 1.1367
+Min coefficient (No-Abs): -1.1252
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 195, 2: 205}
+Prediction distribution: {1: 204, 2: 196}
+AUC for class 1: 0.9633
+AUC for class 2: 0.9633
+AUC 95% CI: [0.947, 0.977]
+
+Final Results:
+Test Accuracy: 0.8925
+Test ROC AUC: 0.9633
+Training class distribution: {1: 105, 2: 95}
+Test class distribution: {1: 195, 2: 205}
+X_train sparsity: 0.8737
+X_test sparsity: 0.8759
+Estimated p_in: 0.1938, Original p_in: 0.1500, Error: 0.0438
+Estimated p_out: 0.0563, Original p_out: 0.1000, Error: 0.0437
+  Updated p_in: 0.1938, p_out: 0.0563
+  Parameter errors - p_in: 0.0438, p_out: 0.0437
+Iteration 3
+Warning: Could not exactly match degree sequence.
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 600)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 600
+Mean absolute coefficient: 0.3183
+Max coefficient: 1.1367
+Min coefficient: 0.0001
+Max coefficient (No-Abs): 1.1367
+Min coefficient (No-Abs): -1.1252
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 195, 2: 205}
+Prediction distribution: {1: 204, 2: 196}
+AUC for class 1: 0.9610
+AUC for class 2: 0.9610
+AUC 95% CI: [0.944, 0.975]
+
+Final Results:
+Test Accuracy: 0.8925
+Test ROC AUC: 0.9610
+Training class distribution: {1: 105, 2: 95}
+Test class distribution: {1: 195, 2: 205}
+X_train sparsity: 0.8737
+X_test sparsity: 0.8759
+Estimated p_in: 0.1938, Original p_in: 0.1500, Error: 0.0438
+Estimated p_out: 0.0563, Original p_out: 0.1000, Error: 0.0437
+  Updated p_in: 0.1938, p_out: 0.0563
+  Parameter errors - p_in: 0.0438, p_out: 0.0437
+Iteration 4
+Warning: Could not exactly match degree sequence.
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 600)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 600
+Mean absolute coefficient: 0.3183
+Max coefficient: 1.1367
+Min coefficient: 0.0001
+Max coefficient (No-Abs): 1.1367
+Min coefficient (No-Abs): -1.1252
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 195, 2: 205}
+Prediction distribution: {1: 204, 2: 196}
+AUC for class 1: 0.9609
+AUC for class 2: 0.9609
+AUC 95% CI: [0.944, 0.975]
+
+Final Results:
+Test Accuracy: 0.8925
+Test ROC AUC: 0.9609
+Training class distribution: {1: 105, 2: 95}
+Test class distribution: {1: 195, 2: 205}
+X_train sparsity: 0.8737
+X_test sparsity: 0.8759
+Estimated p_in: 0.1938, Original p_in: 0.1500, Error: 0.0438
+Estimated p_out: 0.0563, Original p_out: 0.1000, Error: 0.0437
+  Updated p_in: 0.1938, p_out: 0.0563
+  Parameter errors - p_in: 0.0438, p_out: 0.0437
+Iteration 5
+Warning: Could not exactly match degree sequence.
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 600)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 600
+Mean absolute coefficient: 0.3183
+Max coefficient: 1.1367
+Min coefficient: 0.0001
+Max coefficient (No-Abs): 1.1367
+Min coefficient (No-Abs): -1.1252
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 195, 2: 205}
+Prediction distribution: {1: 204, 2: 196}
+AUC for class 1: 0.9609
+AUC for class 2: 0.9609
+AUC 95% CI: [0.944, 0.975]
+
+Final Results:
+Test Accuracy: 0.8925
+Test ROC AUC: 0.9609
+Training class distribution: {1: 105, 2: 95}
+Test class distribution: {1: 195, 2: 205}
+X_train sparsity: 0.8737
+X_test sparsity: 0.8759
+Estimated p_in: 0.1938, Original p_in: 0.1500, Error: 0.0438
+Estimated p_out: 0.0563, Original p_out: 0.1000, Error: 0.0437
+  Updated p_in: 0.1938, p_out: 0.0563
+  Parameter errors - p_in: 0.0438, p_out: 0.0437
+Converged at iteration 5
+Final accuracy: 0.8925
+
+Results for this configuration:
+  - Core-only p_in error: 0.0017
+  - Core-only p_out error: 0.0004
+  - Final prediction accuracy: 0.8925
+
+========================================
+Testing configuration: {'n_g1': 500, 'n_g2': 500, 'p_in': 0.2, 'p_out': 0.05, 'seed': 123}
+========================================
+Generated SBM network:
+  - Total nodes: 1000
+  - Gender 1 nodes: 500
+  - Gender 2 nodes: 500
+  - Original p_in: 0.2000
+  - Original p_out: 0.0500
+Core-fringe structure:
+  - Core size: 200
+  - Fringe size: 800
+
+--- Test 1: Parameter estimation from core only ---
+Estimated p_in: 0.2016, Original p_in: 0.2000, Error: 0.0016
+Estimated p_out: 0.0486, Original p_out: 0.0500, Error: 0.0014
+
+--- Test 2: Iterative fringe label inference with parameter verification ---
+Estimated p_in: 0.2016, Original p_in: 0.2000, Error: 0.0016
+Estimated p_out: 0.0486, Original p_out: 0.0500, Error: 0.0014
+Initial p_in: 0.2016, p_out: 0.0486
+Parameter estimation errors - p_in: 0.0016, p_out: 0.0014
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 1000)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 1000
+Mean absolute coefficient: 0.1161
+Max coefficient: 0.2831
+Min coefficient: 0.0058
+Max coefficient (No-Abs): 0.2464
+Min coefficient (No-Abs): -0.2831
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 399, 2: 401}
+Prediction distribution: {1: 399, 2: 401}
+AUC for class 1: 1.0000
+AUC for class 2: 1.0000
+AUC 95% CI: [1.000, 1.000]
+
+Final Results:
+Test Accuracy: 1.0000
+Test ROC AUC: 1.0000
+Training class distribution: {1: 101, 2: 99}
+Test class distribution: {1: 399, 2: 401}
+X_train sparsity: 0.8749
+X_test sparsity: 0.8751
+Iteration 1
+Warning: Could not exactly match degree sequence.
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 1000)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 1000
+Mean absolute coefficient: 0.1161
+Max coefficient: 0.2831
+Min coefficient: 0.0058
+Max coefficient (No-Abs): 0.2464
+Min coefficient (No-Abs): -0.2831
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 399, 2: 401}
+Prediction distribution: {1: 399, 2: 401}
+AUC for class 1: 1.0000
+AUC for class 2: 1.0000
+AUC 95% CI: [1.000, 1.000]
+
+Final Results:
+Test Accuracy: 1.0000
+Test ROC AUC: 1.0000
+Training class distribution: {1: 101, 2: 99}
+Test class distribution: {1: 399, 2: 401}
+X_train sparsity: 0.8749
+X_test sparsity: 0.8752
+Estimated p_in: 0.2312, Original p_in: 0.2000, Error: 0.0312
+Estimated p_out: 0.0190, Original p_out: 0.0500, Error: 0.0310
+  Updated p_in: 0.2312, p_out: 0.0190
+  Parameter errors - p_in: 0.0312, p_out: 0.0310
+Iteration 2
+Warning: Could not exactly match degree sequence.
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 1000)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 1000
+Mean absolute coefficient: 0.1161
+Max coefficient: 0.2831
+Min coefficient: 0.0058
+Max coefficient (No-Abs): 0.2464
+Min coefficient (No-Abs): -0.2831
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 399, 2: 401}
+Prediction distribution: {1: 399, 2: 401}
+AUC for class 1: 1.0000
+AUC for class 2: 1.0000
+AUC 95% CI: [1.000, 1.000]
+
+Final Results:
+Test Accuracy: 1.0000
+Test ROC AUC: 1.0000
+Training class distribution: {1: 101, 2: 99}
+Test class distribution: {1: 399, 2: 401}
+X_train sparsity: 0.8749
+X_test sparsity: 0.8752
+Estimated p_in: 0.2312, Original p_in: 0.2000, Error: 0.0312
+Estimated p_out: 0.0190, Original p_out: 0.0500, Error: 0.0310
+  Updated p_in: 0.2312, p_out: 0.0190
+  Parameter errors - p_in: 0.0312, p_out: 0.0310
+Converged at iteration 2
+Final accuracy: 1.0000
+
+Results for this configuration:
+  - Core-only p_in error: 0.0016
+  - Core-only p_out error: 0.0014
+  - Final prediction accuracy: 1.0000
+
+========================================
+Testing configuration: {'n_g1': 400, 'n_g2': 400, 'p_in': 0.25, 'p_out': 0.08, 'seed': 456}
+========================================
+Generated SBM network:
+  - Total nodes: 800
+  - Gender 1 nodes: 400
+  - Gender 2 nodes: 400
+  - Original p_in: 0.2500
+  - Original p_out: 0.0800
+Core-fringe structure:
+  - Core size: 200
+  - Fringe size: 600
+
+--- Test 1: Parameter estimation from core only ---
+Estimated p_in: 0.2529, Original p_in: 0.2500, Error: 0.0029
+Estimated p_out: 0.0792, Original p_out: 0.0800, Error: 0.0008
+
+--- Test 2: Iterative fringe label inference with parameter verification ---
+Estimated p_in: 0.2529, Original p_in: 0.2500, Error: 0.0029
+Estimated p_out: 0.0792, Original p_out: 0.0800, Error: 0.0008
+Initial p_in: 0.2529, p_out: 0.0792
+Parameter estimation errors - p_in: 0.0029, p_out: 0.0008
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 800)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 800
+Mean absolute coefficient: 0.1281
+Max coefficient: 0.2881
+Min coefficient: 0.0173
+Max coefficient (No-Abs): 0.2881
+Min coefficient (No-Abs): -0.2628
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 288, 2: 312}
+Prediction distribution: {1: 288, 2: 312}
+AUC for class 1: 1.0000
+AUC for class 2: 1.0000
+AUC 95% CI: [1.000, 1.000]
+
+Final Results:
+Test Accuracy: 1.0000
+Test ROC AUC: 1.0000
+Training class distribution: {1: 112, 2: 88}
+Test class distribution: {1: 288, 2: 312}
+X_train sparsity: 0.8341
+X_test sparsity: 0.8344
+Iteration 1
+Warning: Could not exactly match degree sequence.
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 800)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 800
+Mean absolute coefficient: 0.1281
+Max coefficient: 0.2881
+Min coefficient: 0.0173
+Max coefficient (No-Abs): 0.2881
+Min coefficient (No-Abs): -0.2628
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 288, 2: 312}
+Prediction distribution: {1: 294, 2: 306}
+AUC for class 1: 1.0000
+AUC for class 2: 1.0000
+AUC 95% CI: [1.000, 1.000]
+
+Final Results:
+Test Accuracy: 0.9900
+Test ROC AUC: 1.0000
+Training class distribution: {1: 112, 2: 88}
+Test class distribution: {1: 288, 2: 312}
+X_train sparsity: 0.8341
+X_test sparsity: 0.8348
+Estimated p_in: 0.2964, Original p_in: 0.2500, Error: 0.0464
+Estimated p_out: 0.0351, Original p_out: 0.0800, Error: 0.0449
+  Updated p_in: 0.2964, p_out: 0.0351
+  Parameter errors - p_in: 0.0464, p_out: 0.0449
+Iteration 2
+Warning: Could not exactly match degree sequence.
+
+ Feature Space (Core-Fringe)
+X_train shape: (200, 800)
+y_train shape: (200,)
+Unique training classes: [1 2]
+
+Model Analysis:
+Number of non-zero coefficients: 800
+Mean absolute coefficient: 0.1281
+Max coefficient: 0.2881
+Min coefficient: 0.0173
+Max coefficient (No-Abs): 0.2881
+Min coefficient (No-Abs): -0.2628
+
+Class Order Verification:
+Model classes_: [1 2]
+Unique test classes: [1 2]
+Class distribution in test: {1: 288, 2: 312}
+Prediction distribution: {1: 294, 2: 306}
+AUC for class 1: 1.0000
+AUC for class 2: 1.0000
+AUC 95% CI: [1.000, 1.000]
+
+Final Results:
+Test Accuracy: 0.9900
+Test ROC AUC: 1.0000
+Training class distribution: {1: 112, 2: 88}
+Test class distribution: {1: 288, 2: 312}
+X_train sparsity: 0.8341
+X_test sparsity: 0.8347
+Estimated p_in: 0.2964, Original p_in: 0.2500, Error: 0.0464
+Estimated p_out: 0.0351, Original p_out: 0.0800, Error: 0.0449
+  Updated p_in: 0.2964, p_out: 0.0351
+  Parameter errors - p_in: 0.0464, p_out: 0.0449
+Converged at iteration 2
+Final accuracy: 0.9900
+
+Results for this configuration:
+  - Core-only p_in error: 0.0029
+  - Core-only p_out error: 0.0008
+  - Final prediction accuracy: 0.9900
+
+============================================================
+SUMMARY STATISTICS
+============================================================
+Parameter estimation errors:
+  - p_in errors: mean=0.0021, std=0.0006
+  - p_out errors: mean=0.0008, std=0.0004
+Prediction accuracy:
+  - Mean accuracy: 0.9608
+  - Std accuracy: 0.0485
+Test completed!
+
+Test completed successfully!
+Tested 3 different SBM configurations

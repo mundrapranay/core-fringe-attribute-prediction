@@ -357,12 +357,14 @@ def logistic_regression_link_prediction(adj_matrix, core_indices, fringe_indices
             if u >= v:
                 continue
             feature = extract_link_feature(A, u, v, method)
+            # print(feature)
             X_train.append([feature])
             y_train.append(A[u, v])
     # Core-fringe
     for u in core_indices:
         for v in fringe_indices:
             feature = extract_link_feature(A, u, v, method)
+            # print(feature)
             X_train.append([feature])
             y_train.append(A[u, v])
 
@@ -380,6 +382,7 @@ def logistic_regression_link_prediction(adj_matrix, core_indices, fringe_indices
                 continue
             feature = extract_link_feature(A, u, v, method)
             prob = model.predict_proba([[feature]])[0, 1]
+            # print(prob)
             if prob > threshold:
                 A_pred[u, v] = 1
                 A_pred[v, u] = 1
@@ -400,7 +403,29 @@ def extract_link_feature(A, u, v, method):
     import numpy as np
     from numpy.linalg import eigvalsh
 
-    subA = A[np.ix_([u, v], [u, v])]
+    # subA = A[np.ix_([u, v], [u, v])]
+    # print(subA)
+    # print(subA.shape)
+    # Create submatrix with only intersection of neighbors of u and v
+    subA = np.zeros(A.shape)
+    
+    # # Get neighbors of u and v
+    # neighbors_u = np.where(A[u, :] > 0)[0]
+    # neighbors_v = np.where(A[v, :] > 0)[0]
+    
+    # # Find intersection of neighbors
+    # intersection = np.intersect1d(neighbors_u, neighbors_v)
+    
+    # # Set intersection points to 1
+    # for node in intersection:
+    #     subA[u, node] = 1
+    #     subA[node, u] = 1
+    #     subA[v, node] = 1
+    #     subA[node, v] = 1
+    subA[u, :] = A[u, :]  # Entire row u
+    subA[v, :] = A[v, :]  # Entire row v
+    subA[:, u] = A[:, u]  # Entire column u
+    subA[:, v] = A[:, v]  # Entire column v
     # Laplacian
     L = np.diag(subA.sum(axis=1)) - subA
     eigvals = np.sort(eigvalsh(L))

@@ -1,0 +1,246 @@
+# Core-Fringe Attribute Prediction Project
+
+## Project Overview
+
+This research project focuses on **core-fringe attribute prediction** in social networks, specifically investigating how to predict attributes (such as gender) of fringe nodes using information from core nodes. The project implements and compares multiple machine learning and graph-based methods for this prediction task, with particular emphasis on the effectiveness of different core-fringe graph construction strategies and prediction algorithms.
+
+## Core Research Problem
+
+The central research question is: **How can we effectively predict attributes of fringe nodes (peripheral nodes) in a social network using only information from core nodes (central nodes) and the network structure?**
+
+### Key Concepts
+
+1. **Core Nodes**: Central nodes in the network (e.g., students from specific dorms)
+2. **Fringe Nodes**: Peripheral nodes connected to core nodes but not part of the core
+3. **Core-Fringe Graph**: A subgraph containing core nodes, fringe nodes, and their connections
+4. **Attribute Prediction**: Predicting categorical attributes (like gender) of fringe nodes
+
+## Dataset and Data Processing
+
+### Primary Dataset: FB100
+- **Source**: Facebook 100 dataset containing social networks from 100 different colleges/universities
+- **Format**: MATLAB (.mat) files containing adjacency matrices and metadata
+- **Metadata Fields**:
+  - Student/faculty status (0)
+  - Gender (1) - Binary classification target
+  - Major (2)
+  - Second major/minor (3)
+  - Dorm/house (4) - Used for core definition
+  - Year (5)
+  - High school (6)
+
+### Data Preprocessing Pipeline
+1. **Data Cleaning**: Remove nodes with missing gender or dorm information
+2. **Core-Fringe Construction**: Create core-fringe graphs using different strategies:
+   - **Dorm-based**: Core = students from specific dorms
+   - **IID-based**: Core = random sample of nodes
+   - **Multi-dorm**: Core = students from multiple dorms
+
+### Synthetic Data Generation
+- **Stochastic Block Model (SBM)**: Generate synthetic networks with controlled homophily parameters
+- **Parameters**: p_in (within-group connection probability), p_out (between-group connection probability)
+- **Use Cases**: Controlled experiments to understand method performance under different network structures
+
+## Methods and Techniques
+
+### 1. Link Prediction Methods
+
+#### A. Logistic Regression with Link Features
+- **Core-Only Features**: Uses only core-core connections as features
+- **Core-Fringe Features**: Uses both core-core and core-fringe connections
+- **Expected Degree Features**: Incorporates expected degree information for fringe nodes
+- **Implementation**: `link_logistic_regression_pipeline()` in `methods.py`
+
+#### B. Node2Vec Embeddings
+- **Algorithm**: Random walk-based node embeddings using Word2Vec
+- **Parameters**: Walk length, number of walks, window size, p (return), q (in-out)
+- **Features**: Node embeddings trained on the full graph
+- **Implementation**: `PureNode2Vec` class and `node2vec_embeddings_gensim()` in `node2vecLR.py`
+
+#### C. Iterative Label Inference
+- **Method**: Iteratively update fringe node labels based on neighbor information
+- **Convergence**: Uses tolerance-based stopping criteria
+- **Variants**: Multiple update rules and initialization strategies
+- **Implementation**: `iterative_fringe_label_inference()` in `methods.py`
+
+### 2. Fringe-Fringe Edge Prediction
+
+#### A. Expected Degree Imputation
+- **Theory**: Estimate missing fringe-fringe edges based on expected degree
+- **Calculation**: Uses SBM parameters to estimate expected degrees
+- **Implementation**: `expected_degree_imputation()` in `fringe_edge_predictions.py`
+
+#### B. Benson's Link Prediction Methods
+- **Common Neighbors (CN)**: Count common neighbors between fringe nodes
+- **Jaccard Coefficient (JK)**: Normalized common neighbors
+- **Implementation**: `fill_fringe_fringe_block_benson()` in `fringe_edge_predictions.py`
+
+#### C. Cosine Similarity Methods
+- **Class-based**: Use core node class information to inform fringe-fringe connections
+- **Implementation**: `fill_fringe_fringe_block_class_cosine()` in `fringe_edge_predictions.py`
+
+### 3. Transductive Learning
+- **Method**: Semi-supervised learning that uses both labeled and unlabeled data
+- **Implementation**: `TransductiveLogisticRegression` class in `methods.py`
+- **Features**: Uses PyTorch for gradient-based optimization
+
+## Experimental Design
+
+### 1. Core-Fringe Graph Construction Strategies
+
+#### A. Dorm-based Core Selection
+- **Method**: Select core nodes based on dorm membership
+- **Advantage**: Natural community structure
+- **Disadvantage**: May introduce bias
+
+#### B. IID Core Selection
+- **Method**: Random sampling of nodes as core
+- **Advantage**: Unbiased representation
+- **Disadvantage**: May not capture community structure
+
+#### C. Multi-dorm Core Selection
+- **Method**: Combine multiple dorms as core
+- **Advantage**: Larger, more diverse core
+- **Disadvantage**: May dilute community structure
+
+### 2. Evaluation Metrics
+
+#### A. Accuracy Metrics
+- **Overall Accuracy**: Percentage of correctly classified fringe nodes
+- **Class-wise Accuracy**: Accuracy for each class separately
+- **Implementation**: `accuracy_score()` from scikit-learn
+
+#### B. AUC Metrics
+- **ROC AUC**: Area under the receiver operating characteristic curve
+- **Confidence Intervals**: Bootstrap-based confidence intervals for AUC
+- **Implementation**: `roc_auc_score()` and `auc_confidence_interval()` in `methods.py`
+
+### 3. Experimental Parameters
+
+#### A. Core Size Variations
+- **Percentages**: 10%, 20%, 30%, 40%, 50%, 60%, 70%, 80%, 90%, 100%
+- **Purpose**: Understand how core size affects prediction performance
+
+#### B. Network Structure Parameters
+- **Homophily Sweeps**: Varying p_in/p_out ratios
+- **Fringe Inclusion**: Different strategies for including fringe nodes
+- **SBM Parameters**: Controlled synthetic network generation
+
+## Key Findings and Results
+
+### 1. Performance Comparison
+Based on the experimental results in the `results/` directory:
+
+- **Best Performing Methods**: 
+  - Cosine similarity-based methods often achieve highest AUC scores
+  - Core-fringe features generally outperform core-only features
+  - Iterative methods show consistent improvement over baseline
+
+- **AUC Scores**: Range from ~0.68 to ~0.93 depending on method and core size
+- **Accuracy Patterns**: Class-wise accuracy varies significantly, indicating class imbalance challenges
+
+### 2. Core Size Effects
+- **Small Cores (10-30%)**: Lower performance, high variance
+- **Medium Cores (40-70%)**: Balanced performance
+- **Large Cores (80-100%)**: Best performance, but diminishing returns
+
+### 3. Method Comparison
+- **Link LR**: Baseline method, reasonable performance
+- **Node2Vec**: Good performance, especially with proper hyperparameters
+- **Iterative Methods**: Consistent improvement over baselines
+- **Benson Methods**: Competitive performance, especially CN and JK variants
+
+## Technical Implementation Details
+
+### 1. Data Structures
+- **Adjacency Matrices**: Sparse CSR format for memory efficiency
+- **Metadata Arrays**: NumPy arrays for node attributes
+- **Graph Objects**: NetworkX for graph operations
+
+### 2. Computational Optimizations
+- **Sparse Matrix Operations**: Efficient handling of large networks
+- **Parallel Processing**: Multi-threading for hyperparameter search
+- **Memory Management**: Careful handling of large adjacency matrices
+
+### 3. Visualization and Analysis
+- **Plotting**: Matplotlib for result visualization
+- **Statistical Analysis**: Confidence intervals and significance testing
+- **Result Storage**: CSV files for systematic result tracking
+
+## File Organization
+
+### Core Implementation Files
+- `data_loader.py`: Data loading and core-fringe graph construction
+- `methods.py`: Main prediction algorithms and evaluation methods
+- `pipelines.py`: Experimental pipelines and orchestration
+- `fringe_edge_predictions.py`: Fringe-fringe edge prediction methods
+- `node2vecLR.py`: Node2Vec implementation and integration
+- `data_preprocessing.py`: Data preprocessing and synthetic data generation
+
+### Supporting Files
+- `plotter.py`: Visualization utilities
+- `define_paths.py`: Path configuration
+- `requirements.txt`: Python dependencies
+
+### Data and Results
+- `data/`: Raw datasets and processed data
+- `results/`: Experimental results in CSV format
+- `figures/`: Generated plots and visualizations
+
+## Dependencies and Environment
+
+### Python Packages
+- **NumPy**: Numerical computing and array operations
+- **SciPy**: Sparse matrices and scientific computing
+- **Pandas**: Data manipulation and analysis
+- **Scikit-learn**: Machine learning algorithms and metrics
+- **Matplotlib**: Plotting and visualization
+- **NetworkX**: Graph operations and algorithms
+- **Gensim**: Word2Vec implementation for Node2Vec
+- **PyTorch**: Deep learning for transductive methods
+- **CVXPY**: Convex optimization (if needed)
+
+### System Requirements
+- **Memory**: Large datasets require significant RAM
+- **Storage**: Adjacency matrices can be several GB
+- **Processing**: Multi-core processing recommended for experiments
+
+## Research Contributions
+
+### 1. Novel Core-Fringe Framework
+- Systematic comparison of core selection strategies
+- Comprehensive evaluation of prediction methods
+- Integration of multiple graph-based techniques
+
+### 2. Methodological Advances
+- Iterative fringe label inference algorithms
+- Expected degree-based fringe-fringe edge prediction
+- Transductive learning approaches for core-fringe scenarios
+
+### 3. Empirical Insights
+- Performance characterization across different network structures
+- Understanding of core size effects on prediction accuracy
+- Comparison of link prediction vs. embedding-based methods
+
+## Future Directions
+
+### 1. Methodological Extensions
+- Deep learning approaches for core-fringe prediction
+- Dynamic network analysis
+- Multi-attribute prediction
+
+### 2. Theoretical Developments
+- Theoretical analysis of core-fringe prediction performance
+- Convergence guarantees for iterative methods
+- Optimal core selection strategies
+
+### 3. Applications
+- Social network analysis
+- Community detection
+- Anomaly detection in networks
+
+## Conclusion
+
+This project provides a comprehensive framework for core-fringe attribute prediction in social networks. The systematic comparison of methods, extensive experimental evaluation, and novel algorithmic contributions advance our understanding of how to effectively predict attributes of peripheral nodes using information from central nodes. The results demonstrate the effectiveness of various approaches and provide insights into the factors that influence prediction performance in core-fringe scenarios.
+
+The codebase is well-structured, extensively documented, and provides a solid foundation for future research in this area. The experimental results show promising performance across multiple methods, with particular success for cosine similarity-based approaches and iterative inference methods. 

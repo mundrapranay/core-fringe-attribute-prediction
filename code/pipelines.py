@@ -176,12 +176,16 @@ def iid_pipeline():
 
 def sbm_pipeline(n_runs=1):
     file_ext = '.mat'
-    percentages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-    seeds = [123, 345, 678, 910, 112]
+    # percentages = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    percentages = [0.5]
+    # seeds = [123, 345, 678, 910, 112]
     n_steps = len(percentages)
-    auc_scores = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : [], 'iterative_benson_cn' : [], 'iterative_benson_jk' : [], 'iterative_cosine' : [], 'iterative_eigenValue2' : [], 'iterative_eigenValue3' : [], 'iterative_nonZeroEigen' : []}
-    auc_cis = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : [], 'iterative_benson_cn' : [], 'iterative_benson_jk' : [], 'iterative_cosine' : [], 'iterative_eigenValue2' : [], 'iterative_eigenValue3' : [], 'iterative_nonZeroEigen' : []}
-    acc_scores = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : [], 'iterative_benson_cn' : [], 'iterative_benson_jk' : [], 'iterative_cosine' : [], 'iterative_eigenValue2' : [], 'iterative_eigenValue3' : [], 'iterative_nonZeroEigen' : []}
+    # auc_scores = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : [], 'iterative_benson_cn' : [], 'iterative_benson_jk' : [], 'iterative_cosine' : [], 'iterative_eigenValue2' : [], 'iterative_eigenValue3' : [], 'iterative_nonZeroEigen' : []}
+    # auc_cis = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : [], 'iterative_benson_cn' : [], 'iterative_benson_jk' : [], 'iterative_cosine' : [], 'iterative_eigenValue2' : [], 'iterative_eigenValue3' : [], 'iterative_nonZeroEigen' : []}
+    # acc_scores = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : [], 'iterative_benson_cn' : [], 'iterative_benson_jk' : [], 'iterative_cosine' : [], 'iterative_eigenValue2' : [], 'iterative_eigenValue3' : [], 'iterative_nonZeroEigen' : []}
+    auc_scores = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : []}
+    auc_cis = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : []}
+    acc_scores = { 'cf': [], 'iterative':[], 'benson_cn':[], 'benson_jk':[], 'cosine' : [], 'eigenValue2' : [], 'eigenValue3' : [], 'nonZeroEigen' : []}
     for run in range(n_runs):
         print(f"SBM pipeline run {run+1}/{n_runs}")
         for f in listdir(fb_code_path):
@@ -190,104 +194,112 @@ def sbm_pipeline(n_runs=1):
                 # seed = seeds[run]
                 from datetime import datetime
                 seed = random.seed(datetime.now().timestamp())
-                # sbm_adj_matrix, metadata = sbm_gender_homophily_adj_and_metadata(500, 500, 0.15, 0.1, seed=seed)
-                # adj_matrix, core_indices, fringe_indices, ff_true = create_iid_core_fringe_graph(sbm_adj_matrix, 300, seed=seed, ff=True)
-                adj_matrix, metadata = parse_fb100_mat_file(path_join(fb_code_path, f))
-                chosen_dorms_list = [[np.uint(31), np.uint(32)]]
-                adj_matrix, core_indices, fringe_indices = create_multi_dorm_core_fringe_graph(adj_matrix, metadata, chosen_dorms_list)
+                sbm_adj_matrix, metadata = sbm_gender_homophily_adj_and_metadata(500, 500, 0.15, 0.1, seed=seed)
+                adj_matrix, core_indices, fringe_indices, ff_true = create_iid_core_fringe_graph(sbm_adj_matrix, 300, seed=seed, ff=True)
+                # adj_matrix, metadata = parse_fb100_mat_file(path_join(fb_code_path, f))
+                # chosen_dorms_list = [[np.uint(31), np.uint(32)]]
+                # adj_matrix, core_indices, fringe_indices = create_multi_dorm_core_fringe_graph(adj_matrix, metadata, chosen_dorms_list)
                 # adj_matrix, core_indices, fringe_indices, metadata = sbm_manual_core_fringe(1000, 400, 0.15, 0.1, seed=seed)
                 lr_kwargs = {'C': 100, 'solver': 'liblinear', 'max_iter': 1000}
                 for idx, p in enumerate(percentages):
                     labelled_core_indices = np.random.choice(core_indices, size=int(p * len(core_indices)), replace=False)
                     # _, acc_core_only, auc_core_only, ci_cc = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=True, lr_kwargs=lr_kwargs, return_auc_ci=True)
-                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, return_auc_ci=True)
+                    result = run_with_timeout(link_logistic_regression_pipeline, 1200, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, return_auc_ci=True)
                     if result is not None:
                         _, acc_core_fringe, auc_core_fringe, ci_cf = result
                     else:
-                        acc_core_fringe = auc_core_fringe = ci_cf = None
+                        acc_core_fringe = auc_core_fringe = None
+                        ci_cf = (None, None)
 
                     # _, acc_cfed, auc_cfed, ci_cfed = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, sbm=True, return_auc_ci=True)
-                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, sbm=True, return_auc_ci=True)
+                    result = run_with_timeout(link_logistic_regression_pipeline, 1200, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, sbm=True, return_auc_ci=True)
                     if result is not None:
                         _, acc_benson_cn, auc_benson_cn, ci_benson_cn = result
                     else:
-                        acc_benson_cn = auc_benson_cn = ci_benson_cn = None
+                        acc_benson_cn = auc_benson_cn = None
+                        ci_benson_cn = (None, None)
 
-                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, benson=True, benson_method='jk', return_auc_ci=True)
+                    result = run_with_timeout(link_logistic_regression_pipeline, 1200, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, benson=True, benson_method='jk', return_auc_ci=True)
                     if result is not None:
                         _, acc_benson_jk, auc_benson_jk, ci_benson_jk = result
                     else:
-                        acc_benson_jk = auc_benson_jk = ci_benson_jk = None
+                        acc_benson_jk = auc_benson_jk = None
+                        ci_benson_jk = (None, None)
 
-                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, cosine=True, return_auc_ci=True)
+                    result = run_with_timeout(link_logistic_regression_pipeline, 1200, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, cosine=True, return_auc_ci=True)
                     if result is not None:
                         _, acc_cosine, auc_cosine, ci_cosine = result
                     else:
-                        acc_cosine = auc_cosine = ci_cosine = None
+                        acc_cosine = auc_cosine = None
+                        ci_cosine = (None, None)
 
-                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method='eigenValue2', return_auc_ci=True)
+                    result = run_with_timeout(link_logistic_regression_pipeline, 1200, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method='eigenValue2', return_auc_ci=True)
                     if result is not None:
                         _, acc_eigen2, auc_eigen2, ci_eigen2 = result
                     else:
-                        acc_eigen2 = auc_eigen2 = ci_eigen2 = None
+                        acc_eigen2 = auc_eigen2 = None
+                        ci_eigen2 = (None, None)
 
-                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method='eigenValue3', return_auc_ci=True)
+                    result = run_with_timeout(link_logistic_regression_pipeline, 1200, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method='eigenValue3', return_auc_ci=True)
                     if result is not None:
                         _, acc_eigen3, auc_eigen3, ci_eigen3 = result
                     else:
-                        acc_eigen3 = auc_eigen3 = ci_eigen3 = None
+                        acc_eigen3 = auc_eigen3 = None
+                        ci_eigen3 = (None, None)
 
-                    result = run_with_timeout(link_logistic_regression_pipeline, 600, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method='nonZeroEigen', return_auc_ci=True)
+                    result = run_with_timeout(link_logistic_regression_pipeline, 1200, adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method='nonZeroEigen', return_auc_ci=True)
                     if result is not None:
                         _, acc_nzeigen, auc_nzeigen, ci_nzeigen = result
                     else:
-                        acc_nzeigen = auc_nzeigen = ci_nzeigen = None
+                        acc_nzeigen = auc_nzeigen = None
+                        ci_nzeigen = (None, None)
 
                     # _, acc_cfed_naive, auc_cfed_naive, ci_cfed_naive = link_logistic_regression_pipeline(adj_matrix, labelled_core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, expected_degree=True, iid_core=True, p_core_fringe=0.15, p_fringe_fringe=0.0, naive_degree=True, return_auc_ci=True)
-                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata)
+                    result = run_with_timeout(iterative_fringe_label_inference, 1200, adj_matrix, labelled_core_indices, fringe_indices, T_max=10, metadata=metadata)
                     if result is not None:
                         acc_iterative, auc_iterative, ci_iterative = result
                     else:
-                        acc_iterative = auc_iterative = ci_iterative = None
+                        acc_iterative = auc_iterative = None
+                        ci_iterative = (None, None)
 
 
 
                     # iterative with different jumpstart predictions 
-                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, benson='cn')
-                    if result is not None:
-                        acc_iterative_benson_cn, auc_iterative_benson_cn, ci_iterative_benson_cn = result
-                    else:
-                        acc_iterative_benson_cn = auc_iterative_benson_cn = ci_iterative_benson_cn = None
+                    # result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, benson='cn')
+                    # if result is not None:
+                    #     acc_iterative_benson_cn, auc_iterative_benson_cn, ci_iterative_benson_cn = result
+                    # else:
+                    #     acc_iterative_benson_cn = auc_iterative_benson_cn = ci_iterative_benson_cn = None
 
-                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, benson='jk')
-                    if result is not None:
-                        acc_iterative_benson_jk, auc_iterative_benson_jk, ci_iterative_benson_jk = result
-                    else:
-                        acc_iterative_benson_jk = auc_iterative_benson_jk = ci_iterative_benson_jk = None
+                    # result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, benson='jk')
+                    # if result is not None:
+                    #     acc_iterative_benson_jk, auc_iterative_benson_jk, ci_iterative_benson_jk = result
+                    # else:
+                    #     acc_iterative_benson_jk = auc_iterative_benson_jk = ci_iterative_benson_jk = None
 
-                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, cosine=True)
-                    if result is not None:
-                        acc_iterative_cosine, auc_iterative_cosine, ci_iterative_cosine = result
-                    else:
-                        acc_iterative_cosine = auc_iterative_cosine = ci_iterative_cosine = None
+                    # result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, cosine=True)
+                    # if result is not None:
+                    #     acc_iterative_cosine, auc_iterative_cosine, ci_iterative_cosine = result
+                    # else:
+                    #     acc_iterative_cosine = auc_iterative_cosine = ci_iterative_cosine = None
 
-                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, new_method='eigenValue2')
-                    if result is not None:
-                        acc_iterative_eigenValue2, auc_iterative_eigenValue2, ci_iterative_eigenValue2 = result
-                    else:
-                        acc_iterative_eigenValue2 = auc_iterative_eigenValue2 = ci_iterative_eigenValue2 = None
+                    # result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, new_method='eigenValue2')
+                    # if result is not None:
+                    #     acc_iterative_eigenValue2, auc_iterative_eigenValue2, ci_iterative_eigenValue2 = result
+                    # else:
+                    #     acc_iterative_eigenValue2 = auc_iterative_eigenValue2 = ci_iterative_eigenValue2 = None
 
-                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, new_method='eigenValue3')
-                    if result is not None:
-                        acc_iterative_eigenValue3, auc_iterative_eigenValue3, ci_iterative_eigenValue3 = result
-                    else:
-                        acc_iterative_eigenValue3 = auc_iterative_eigenValue3 = ci_iterative_eigenValue3 = None
+                    # result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, new_method='eigenValue3')
+                    # if result is not None:
+                    #     acc_iterative_eigenValue3, auc_iterative_eigenValue3, ci_iterative_eigenValue3 = result
+                    # else:
+                    #     acc_iterative_eigenValue3 = auc_iterative_eigenValue3 = ci_iterative_eigenValue3 = None
 
-                    result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, new_method='nonZeroEigen')
-                    if result is not None:
-                        acc_iterative_nonZeroEigen, auc_iterative_nonZeroEigen, ci_iterative_nonZeroEigen = result
-                    else:
-                        acc_iterative_nonZeroEigen = auc_iterative_nonZeroEigen = ci_iterative_nonZeroEigen = None
+                    # result = run_with_timeout(iterative_fringe_label_inference, 600, adj_matrix, labelled_core_indices, fringe_indices, T_max=30, metadata=metadata, new_method='nonZeroEigen')
+                    # if result is not None:
+                    #     acc_iterative_nonZeroEigen, auc_iterative_nonZeroEigen, ci_iterative_nonZeroEigen = result
+                    # else:
+                    #     acc_iterative_nonZeroEigen = auc_iterative_nonZeroEigen = ci_iterative_nonZeroEigen = None
 
 
 
@@ -302,12 +314,12 @@ def sbm_pipeline(n_runs=1):
                     auc_scores['eigenValue2'].append(auc_eigen2)
                     auc_scores['eigenValue3'].append(auc_eigen3)
                     auc_scores['nonZeroEigen'].append(auc_nzeigen)
-                    auc_scores['iterative_benson_cn'].append(auc_iterative_benson_cn)
-                    auc_scores['iterative_benson_jk'].append(auc_iterative_benson_jk)
-                    auc_scores['iterative_cosine'].append(auc_iterative_cosine)
-                    auc_scores['iterative_eigenValue2'].append(auc_iterative_eigenValue2)
-                    auc_scores['iterative_eigenValue3'].append(auc_iterative_eigenValue3)
-                    auc_scores['iterative_nonZeroEigen'].append(auc_iterative_nonZeroEigen)
+                    # auc_scores['iterative_benson_cn'].append(auc_iterative_benson_cn)
+                    # auc_scores['iterative_benson_jk'].append(auc_iterative_benson_jk)
+                    # auc_scores['iterative_cosine'].append(auc_iterative_cosine)
+                    # auc_scores['iterative_eigenValue2'].append(auc_iterative_eigenValue2)
+                    # auc_scores['iterative_eigenValue3'].append(auc_iterative_eigenValue3)
+                    # auc_scores['iterative_nonZeroEigen'].append(auc_iterative_nonZeroEigen)
                     # auc_scores['cfed_naive'].append(auc_cfed_naive)
                     # auc_scores['random'].append(auc_random)
                     # auc_cis['cc'].append(ci_cc)
@@ -321,12 +333,12 @@ def sbm_pipeline(n_runs=1):
                     auc_cis['eigenValue3'].append(ci_eigen3)
                     auc_cis['nonZeroEigen'].append(ci_nzeigen)
 
-                    auc_cis['iterative_benson_cn'].append(ci_iterative_benson_cn)
-                    auc_cis['iterative_benson_jk'].append(ci_iterative_benson_jk)
-                    auc_cis['iterative_cosine'].append(ci_iterative_cosine)
-                    auc_cis['iterative_eigenValue2'].append(ci_iterative_eigenValue2)
-                    auc_cis['iterative_eigenValue3'].append(ci_iterative_eigenValue3)
-                    auc_cis['iterative_nonZeroEigen'].append(ci_iterative_nonZeroEigen)
+                    # auc_cis['iterative_benson_cn'].append(ci_iterative_benson_cn)
+                    # auc_cis['iterative_benson_jk'].append(ci_iterative_benson_jk)
+                    # auc_cis['iterative_cosine'].append(ci_iterative_cosine)
+                    # auc_cis['iterative_eigenValue2'].append(ci_iterative_eigenValue2)
+                    # auc_cis['iterative_eigenValue3'].append(ci_iterative_eigenValue3)
+                    # auc_cis['iterative_nonZeroEigen'].append(ci_iterative_nonZeroEigen)
                     # auc_cis['cfed_naive'].append(ci_cfed_naive)
                     # auc_cis['random'].append(ci_random)
                     # acc_scores['cc'].append(acc_core_only)
@@ -339,12 +351,12 @@ def sbm_pipeline(n_runs=1):
                     acc_scores['eigenValue2'].append(acc_eigen2)
                     acc_scores['eigenValue3'].append(acc_eigen3)
                     acc_scores['nonZeroEigen'].append(acc_nzeigen)
-                    acc_scores['iterative_benson_cn'].append(acc_iterative_benson_cn)
-                    acc_scores['iterative_benson_jk'].append(acc_iterative_benson_jk)
-                    acc_scores['iterative_cosine'].append(acc_iterative_cosine)
-                    acc_scores['iterative_eigenValue2'].append(acc_iterative_eigenValue2)
-                    acc_scores['iterative_eigenValue3'].append(acc_iterative_eigenValue3)
-                    acc_scores['iterative_nonZeroEigen'].append(acc_iterative_nonZeroEigen)
+                    # acc_scores['iterative_benson_cn'].append(acc_iterative_benson_cn)
+                    # acc_scores['iterative_benson_jk'].append(acc_iterative_benson_jk)
+                    # acc_scores['iterative_cosine'].append(acc_iterative_cosine)
+                    # acc_scores['iterative_eigenValue2'].append(acc_iterative_eigenValue2)
+                    # acc_scores['iterative_eigenValue3'].append(acc_iterative_eigenValue3)
+                    # acc_scores['iterative_nonZeroEigen'].append(acc_iterative_nonZeroEigen)
                     # acc_scores['cfed_naive'].append(acc_cfed_naive)
     # Convert lists to arrays for easier reshaping
     for key in auc_scores:
@@ -369,7 +381,7 @@ def sbm_pipeline(n_runs=1):
     for key in acc_scores:
         if key != 'random':  # Skip random as it's not used in accuracy plots
             acc_scores[key] = np.array(acc_scores[key]).reshape(n_runs, len(percentages)).mean(axis=0)
-    tag = f"YaleIID_pipeline_increased_avg{n_runs}_0.15_0.1_gender_iterative_linkLR_symmetric_binary_benson_new_methods_v2"
+    tag = f"SBMIID_pipeline_increased_avg{n_runs}_0.15_0.1_gender_iterative_linkLR_symmetric_binary_benson_new_methods_spectral_fix"
     plot_auc_with_ci(auc_scores_plot, auc_cis_plot, percentages, tag)
     
     # plot_acc(acc_scores, percentages, f"SBM_gender_0.15_0.1_v5")
@@ -763,10 +775,155 @@ def iterative_pipeline():
     adj_matrix, core_indices, fringe_indices = create_iid_core_fringe_graph(sbm_adj_matrix, 300, seed=seed)
     iterative_fringe_label_inference(adj_matrix, core_indices, fringe_indices, T_max=10, metadata=metadata)
 
+
+def eigen_value_verbose():
+    from datetime import datetime
+    seed = random.seed(datetime.now().timestamp())
+    # adj_matrix, core_indices, fringe_indices, metadata = sbm_manual_core_fringe(n_core, n_fringe, p_cc, p_cf, seed=seed)
+    sbm_adj_matrix, metadata = sbm_gender_homophily_adj_and_metadata(500, 500, 0.15, 0.1, seed=seed)
+    adj_matrix, core_indices, fringe_indices = create_iid_core_fringe_graph(sbm_adj_matrix, 300, seed=seed)
+    lr_kwargs = {'C': 100, 'solver': 'liblinear', 'max_iter': 1000}
+    result = run_with_timeout(link_logistic_regression_pipeline, 1200, adj_matrix, core_indices, fringe_indices, metadata, core_only=False, lr_kwargs=lr_kwargs, new_method='eigenValue3', return_auc_ci=True)
+
+def sbm_gender_homophily_parameter_verification_pipeline():
+    """
+    Test SBM gender homophily with parameter verification.
+    This pipeline creates synthetic SBM networks with known p_in and p_out parameters,
+    then verifies that the estimated parameters are close to the original ones.
+    """
+    from data_preprocessing import sbm_gender_homophily_adj_and_metadata
+    from methods import iterative_fringe_label_inference, estimate_p_in_p_out
+    import numpy as np
+    
+    print("=" * 60)
+    print("SBM GENDER HOMOPHILY PARAMETER VERIFICATION PIPELINE")
+    print("=" * 60)
+    
+    # Test parameters
+    test_configs = [
+        {"n_g1": 300, "n_g2": 300, "p_in": 0.15, "p_out": 0.1, "seed": 42},
+        {"n_g1": 500, "n_g2": 500, "p_in": 0.2, "p_out": 0.05, "seed": 123},
+        {"n_g1": 400, "n_g2": 400, "p_in": 0.25, "p_out": 0.08, "seed": 456},
+    ]
+    
+    results = []
+    
+    for config in test_configs:
+        print(f"\n{'='*40}")
+        print(f"Testing configuration: {config}")
+        print(f"{'='*40}")
+        
+        # Generate SBM network with known parameters
+        adj_matrix, metadata = sbm_gender_homophily_adj_and_metadata(
+            config["n_g1"], config["n_g2"], 
+            config["p_in"], config["p_out"], 
+            config["seed"]
+        )
+        
+        # Convert numpy array to sparse matrix for compatibility
+        from scipy.sparse import csr_matrix
+        adj_matrix = csr_matrix(adj_matrix)
+        
+        print(f"Generated SBM network:")
+        print(f"  - Total nodes: {adj_matrix.shape[0]}")
+        print(f"  - Gender 1 nodes: {config['n_g1']}")
+        print(f"  - Gender 2 nodes: {config['n_g2']}")
+        print(f"  - Original p_in: {config['p_in']:.4f}")
+        print(f"  - Original p_out: {config['p_out']:.4f}")
+        
+        # Create core-fringe structure (using IID core selection)
+        n_core = 200  # Fixed core size for testing
+        core_indices = np.random.choice(adj_matrix.shape[0], size=n_core, replace=False)
+        fringe_indices = np.setdiff1d(np.arange(adj_matrix.shape[0]), core_indices)
+        
+        print(f"Core-fringe structure:")
+        print(f"  - Core size: {len(core_indices)}")
+        print(f"  - Fringe size: {len(fringe_indices)}")
+        
+        # Test 1: Parameter estimation from core only
+        print(f"\n--- Test 1: Parameter estimation from core only ---")
+        y_core = metadata[core_indices, 1]
+        p_in_est, p_out_est, p_in_error, p_out_error = estimate_p_in_p_out(
+            adj_matrix, core_indices, y_core, 
+            config["p_in"], config["p_out"], verbose=True
+        )
+        
+        # Test 2: Iterative fringe label inference with parameter verification
+        print(f"\n--- Test 2: Iterative fringe label inference with parameter verification ---")
+        accuracy, P_yF = iterative_fringe_label_inference(
+            adj_matrix, core_indices, fringe_indices,
+            T_max=10, tol=1e-3, verbose=True,
+            metadata=metadata,
+            original_p_in=config["p_in"], 
+            original_p_out=config["p_out"]
+        )
+        
+        # Store results
+        result = {
+            "config": config,
+            "core_only_p_in_error": p_in_error,
+            "core_only_p_out_error": p_out_error,
+            "final_accuracy": accuracy,
+            "n_core": len(core_indices),
+            "n_fringe": len(fringe_indices)
+        }
+        results.append(result)
+        
+        print(f"\nResults for this configuration:")
+        print(f"  - Core-only p_in error: {p_in_error:.4f}")
+        print(f"  - Core-only p_out error: {p_out_error:.4f}")
+        print(f"  - Final prediction accuracy: {accuracy:.4f}")
+    
+    # Summary statistics
+    print(f"\n{'='*60}")
+    print(f"SUMMARY STATISTICS")
+    print(f"{'='*60}")
+    
+    p_in_errors = [r["core_only_p_in_error"] for r in results]
+    p_out_errors = [r["core_only_p_out_error"] for r in results]
+    accuracies = [r["final_accuracy"] for r in results]
+    
+    print(f"Parameter estimation errors:")
+    print(f"  - p_in errors: mean={np.mean(p_in_errors):.4f}, std={np.std(p_in_errors):.4f}")
+    print(f"  - p_out errors: mean={np.mean(p_out_errors):.4f}, std={np.std(p_out_errors):.4f}")
+    print(f"Prediction accuracy:")
+    print(f"  - Mean accuracy: {np.mean(accuracies):.4f}")
+    print(f"  - Std accuracy: {np.std(accuracies):.4f}")
+    
+    return results
+
+
+def test_parameter_verification():
+    """
+    Simple test function to run the parameter verification pipeline.
+    """
+    print("Running SBM gender homophily parameter verification test...")
+    results = sbm_gender_homophily_parameter_verification_pipeline()
+    print("Test completed!")
+    return results
+
+
 if __name__ == '__main__':
-    sbm_pipeline()
+    # Uncomment the line below to run the parameter verification test
+    # test_parameter_verification()
+    
+    # Or run the regular SBM pipeline
+    sbm_pipeline(n_runs=1)
+    # eigen_value_verbose()
     # test_fringe_prediction_accuracy()
     # hyperparameter_search_node2vec()
     # sbm_homophily_sweep_pipeline()
     # fringe_inclusion_pipeline_and_plot()
     # iterative_pipeline()
+    # print("Starting SBM Gender Homophily Parameter Verification Test")
+    # print("=" * 60)
+    
+    # try:
+    #     results = test_parameter_verification()
+    #     print("\nTest completed successfully!")
+    #     print(f"Tested {len(results)} different SBM configurations")
+        
+    # except Exception as e:
+    #     print(f"Error during testing: {e}")
+    #     import traceback
+    #     traceback.print_exc() 
